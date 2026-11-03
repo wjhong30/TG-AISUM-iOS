@@ -2,8 +2,10 @@ import SwiftUI
 import UIKit
 
 enum SlotMode: String, CaseIterable, Identifiable {
+    case dawn = "凌晨"
     case morning = "上午"
     case afternoon = "下午"
+    case evening = "晚上"
     case full = "全天"
     case custom = "自定义"
     var id: String { rawValue }
@@ -25,8 +27,10 @@ struct SummaryView: View {
 
     private var slot: SlotRange {
         switch slotMode {
+        case .dawn: return .dawn
         case .morning: return .morning
         case .afternoon: return .afternoon
+        case .evening: return .evening
         case .full: return .full
         case .custom:
             return .custom(
@@ -199,16 +203,14 @@ struct SummaryView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else if let summary = card.summary {
-                Text(summary.text)
-                    .font(.system(.callout, design: .monospaced))
-                    .textSelection(.enabled)
+                RichTextView(raw: summary.text)
                 HStack {
                     Text("生成于 \(summary.generatedAt.formatted(.dateTime.month().day().hour().minute())) · \(summary.model)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button("复制") {
-                        UIPasteboard.general.string = summary.text
+                        UIPasteboard.general.string = PromptBuilder.cleanedOutput(summary.text)
                     }
                     .font(.caption)
                     Button("重新总结") {

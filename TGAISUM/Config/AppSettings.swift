@@ -23,6 +23,9 @@ final class AppSettings: ObservableObject {
         }
     }
     @Published var summaryStyle: String { didSet { d.set(summaryStyle, forKey: "summaryStyle") } }
+    @Published var promptTemplate: String {
+        didSet { d.set(promptTemplate, forKey: "promptTemplate") }
+    }
     @Published var autoSummarize: Bool { didSet { d.set(autoSummarize, forKey: "autoSummarize") } }
     @Published var selectedChatIds: [Int64] {
         didSet { d.set(selectedChatIds.map(String.init), forKey: "selectedChatIds") }
@@ -44,6 +47,7 @@ final class AppSettings: ObservableObject {
         phone = d.string(forKey: "phone") ?? ""
         llmNodes = (d.data(forKey: "llmNodes")).flatMap { try? JSONDecoder().decode([LLMNode].self, from: $0) } ?? []
         summaryStyle = d.string(forKey: "summaryStyle") ?? "请用中文输出，结构清晰，重点优先。"
+        promptTemplate = d.string(forKey: "promptTemplate") ?? ""
         autoSummarize = d.bool(forKey: "autoSummarize")
         selectedChatIds = (d.stringArray(forKey: "selectedChatIds") ?? []).compactMap { Int64($0) }
         proxyEnabled = d.bool(forKey: "proxyEnabled")

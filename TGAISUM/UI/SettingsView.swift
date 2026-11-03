@@ -70,9 +70,32 @@ struct SettingsView: View {
                 }
 
                 Section("总结") {
-                    TextField("输出风格要求", text: $settings.summaryStyle, axis: .vertical)
+                    TextField("输出风格要求（{style} 占位符内容）", text: $settings.summaryStyle, axis: .vertical)
                         .lineLimit(2...4)
                     Toggle("打开 App 自动同步并总结", isOn: $settings.autoSummarize)
+                }
+
+                Section {
+                    TextEditor(text: $settings.promptTemplate)
+                        .font(.system(size: 12, design: .monospaced))
+                        .frame(minHeight: 200)
+                        .overlay {
+                            if settings.promptTemplate.isEmpty {
+                                Text("使用内置默认模板（可在左侧输入自定义模板覆盖）\n可用占位符：{group} {date} {slot} {style} {total} {text} {media} {senders} {transcript}")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                                    .padding(.horizontal, 8)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                    Button("恢复默认模板") {
+                        settings.promptTemplate = ""
+                    }
+                } header: {
+                    Text("提示词模板（留空用默认）")
+                } footer: {
+                    Text("模板会替代默认提示词。占位符：{group}=群名 {date}=日期 {slot}=时段 {style}=风格要求 {total}/{text}/{media}=消息统计 {senders}=活跃成员 {transcript}=聊天记录")
                 }
 
                 Section("数据") {

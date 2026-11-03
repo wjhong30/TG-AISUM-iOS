@@ -38,6 +38,33 @@ struct GroupsView: View {
                     }
                 }
 
+                if !settings.selectedChatIds.isEmpty {
+                    Section {
+                        ForEach(settings.selectedChatIds, id: \.self) { chatId in
+                            HStack {
+                                Image(systemName: "sparkles")
+                                    .foregroundStyle(.tint)
+                                    .font(.caption)
+                                Text(model.chats.first(where: { $0.id == chatId })?.title ?? "群 \(chatId)")
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Button {
+                                    settings.selectedChatIds.removeAll { $0 == chatId }
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .buttonStyle(.borderless)
+                            }
+                        }
+                        Button("清空清单", role: .destructive) {
+                            settings.selectedChatIds.removeAll()
+                        }
+                    } header: {
+                        Text("我的总结清单（已记住，总结页按此生成）")
+                    }
+                }
+
                 Section {
                     ForEach(model.chats, id: \.id) { chat in
                         Button {

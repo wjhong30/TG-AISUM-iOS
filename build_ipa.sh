@@ -14,17 +14,33 @@ VENDOR=$ROOT/vendor
 
 mkdir -p "$BUILD"
 
-# 1) 找 TDLibFramework 的 iOS arm64 切片
-if [ ! -d /tmp/TDLibFramework.xcframework ]; then
-  echo "缺少 TDLibFramework，先解压 vendor 包" >&2
+# 1) 定位 TDLibFramework.xcframework：优先 $TDLIB_XCFRAMEWORK，其次 vendor/，最后 /tmp/
+CANDIDATES=("${TDLIB_XCFRAMEWORK:-}" "$ROOT/vendor/TDLibFramework.xcframework" "/tmp/TDLibFramework.xcframework")
+XCF=""
+for c in "${CANDIDATES[@]}"; do
+  [ -n "$c" ] && [ -d "$c" ] && XCF="$c" && break
+done
+if [ -z "$XCF" ] && [ -f "$ROOT/vendor/TDLibFramework.zip" ]; then
+  echo "解压 vendor/TDLibFramework.zip ..."
+  (cd "$ROOT/vendor" && unzip -q -o TDLibFramework.zip)
+  XCF="$ROOT/vendor/TDLibFramework.xcframework"
+fi
+if [ -z "$XCF" ]; then
+  cat >&2 <<'MISSING'
+缺少 TDLibFramework.xcframework。二选一：
+  1) curl -L -o vendor/TDLibFramework.zip \
+       https://github.com/Swiftgram/TDLibFramework/releases/download/1.8.69-4c6377aa/TDLibFramework.zip
+  2) export TDLIB_XCFRAMEWORK=/path/to/TDLibFramework.xcframework
+MISSING
   exit 1
 fi
+echo "Using xcframework: $XCF"
 SLICE=""
-for d in /tmp/TDLibFramework.xcframework/ios-arm64 /tmp/TDLibFramework.xcframework/ios-arm64_x86_64-simulator; do
+for d in "$XCF/ios-arm64" "$XCF/ios-arm64_x86_64-simulator"; do
   [ -d "$d" ] && SLICE="$d" && break
 done
 if [ -z "$SLICE" ]; then
-  SLICE=$(ls -d /tmp/TDLibFramework.xcframework/ios-arm64* | head -1)
+  SLICE=$(ls -d "$XCF"/ios-arm64* | head -1)
 fi
 FW="$SLICE/TDLibFramework.framework"
 echo "Framework slice: $FW"
@@ -93,10 +109,14 @@ if [ "$DYNAMIC" -gt 0 ]; then
   ldid -S "$STAGE/Frameworks/TDLibFramework.framework/TDLibFramework" 2>/dev/null || true
 fi
 
+# strip 与 ldid 顺序固定：先瘦身再签名，否则签名失效
+strip -x "$STAGE/$APP_NAME" 2>/dev/null || true
 ldid -S "$STAGE/$APP_NAME"
 plutil -lint "$STAGE/Info.plist"
 
 cd "$BUILD"
 rm -f "$ROOT/$APP_NAME.ipa"
 zip -qry "$ROOT/$APP_NAME.ipa" Payload
-echo "IPA 已生成: $ROOT/$APP_NAME.ipa"
+VER=$(plutil -extract CFBundleShortVersionString raw "$STAGE/Info.plist")
+cp "$ROOT/$APP_NAME.ipa" "$ROOT/$APP_NAME-$VER.ipa"
+echo "IPA 已生成: $ROOT/$APP_NAME.ipa（副本 $APP_NAME-$VER.ipa）"

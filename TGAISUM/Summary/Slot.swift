@@ -6,8 +6,10 @@ struct SlotRange: Equatable {
     let key: String
     let label: String
 
-    static let morning = SlotRange(startMinute: 0, endMinute: 12 * 60, key: "am", label: "上午")
-    static let afternoon = SlotRange(startMinute: 12 * 60, endMinute: 24 * 60, key: "pm", label: "下午")
+    static let dawn = SlotRange(startMinute: 0, endMinute: 6 * 60, key: "dawn", label: "凌晨")
+    static let morning = SlotRange(startMinute: 6 * 60, endMinute: 12 * 60, key: "morn", label: "上午")
+    static let afternoon = SlotRange(startMinute: 12 * 60, endMinute: 18 * 60, key: "aft", label: "下午")
+    static let evening = SlotRange(startMinute: 18 * 60, endMinute: 24 * 60, key: "eve", label: "晚上")
     static let full = SlotRange(startMinute: 0, endMinute: 24 * 60, key: "full", label: "全天")
 
     static func custom(startMinute: Int, endMinute: Int) -> SlotRange {
@@ -25,6 +27,7 @@ struct SlotRange: Equatable {
                endMinute / 60, endMinute % 60)
     }
 
+    /// 提示词里使用：名称 + 时间区间
     var rangeDescription: String {
         "\(label) \(timeText)"
     }
