@@ -15,6 +15,9 @@ struct GroupSummaryView: View {
     @State private var slotMode: SlotMode = .full
     @State private var customStart = Calendar.current.date(bySettingHour: 8, minute: 0, second: 0, of: Date()) ?? Date()
     @State private var customEnd = Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: Date()) ?? Date()
+    @State private var fetchingDay = false
+    /// 已尝试补抓过的日期（避免无消息的日期反复触发抓取）
+    @State private var fetchedDays: Set<String> = []
 
     private var dayKey: String { DayUtil.dayKey(day) }
     private var slot: SlotRange { slotMode.range(customStart: customStart, customEnd: customEnd) }
@@ -62,7 +65,8 @@ struct GroupSummaryView: View {
                 .disabled(generating || sync.syncing)
             }
         }
-        .task {
+        .task(id: dayKey) {
+            await ensureDayFetched()
             guard settings.autoSummarize else { return }
             if generating { return }
             if SummaryPolicy.shouldAutoRegenerate(summary: summary, currentCount: messages.count) {
@@ -70,6 +74,26 @@ struct GroupSummaryView: View {
                     chatId: chatId, chatTitle: chatTitle, dayKey: dayKey, slot: slot)
             }
         }
+    }
+
+    /// 按需补抓：所选日期在归档里没有任何消息时，现场抓取那一天（前后各放宽 1 小时）
+    private func ensureDayFetched() async {
+        guard !fetchingDay, !fetchedDays.contains(dayKey) else { return }
+        let all = archive.load(chatId)
+        let start = DayUtil.epoch(DayUtil.dayStart(ofDay: dayKey))
+        if all.contains(where: { $0.date >= start && $0.date < start + 86400 }) { return }
+        fetchingDay = true
+        ArchiveStore.shared.syncState[chatId] = "抓取 \(dayKey) 的记录…"
+        let msgs = await TDService.shared.fetchMessages(
+            chatId: chatId, stopBeforeDate: start - 3600)
+        let dayEnd = start + 86400 + 3600
+        let dayMsgs = msgs.filter { $0.date >= start && $0.date < dayEnd }
+        archive.merge(chatId, dayMsgs)
+        fetchedDays.insert(dayKey)
+        ArchiveStore.shared.syncState[chatId] = dayMsgs.isEmpty
+            ? "已抓取 \(dayKey)：当日无消息"
+            : "已补抓 \(dayKey) 的 \(dayMsgs.count) 条消息"
+        fetchingDay = false
     }
 
     // MARK: - 头部
@@ -234,7 +258,7 @@ struct GroupSummaryView: View {
             if topic.bullets.isEmpty, !topic.title.isEmpty {
                 Text(topic.title).font(.callout.weight(.medium))
             }
-            citationChips(topic.citations)
+            viewLogLink(citations: topic.citations)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
@@ -280,12 +304,32 @@ struct GroupSummaryView: View {
                 }
             }
 
-            citationChips(topic.citations)
+            viewLogLink(citations: topic.citations)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .background(Color(uiColor: .secondarySystemGroupedBackground),
                     in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    /// 「查看记录」入口：跳该话题引用消息所在的原始记录（高亮第一条引用）
+    @ViewBuilder
+    private func viewLogLink(citations: [Int]) -> some View {
+        let firstValid = citations.first { PromptBuilder.message(at: $0, in: messages) != nil }
+        if firstValid != nil || !messages.isEmpty {
+            HStack {
+                Spacer()
+                NavigationLink(value: ChatLogTarget(
+                    chatId: chatId, title: chatTitle, dayKey: dayKey,
+                    startMinute: slot.startMinute, endMinute: slot.endMinute,
+                    highlight: firstValid.flatMap { PromptBuilder.message(at: $0, in: messages)?.id })) {
+                    Label("查看记录", systemImage: "bubble.left.and.bubble.right")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
     }
 
     /// 话题时间区间 → 该时段的原始记录页
@@ -305,60 +349,6 @@ struct GroupSummaryView: View {
         guard bits.count == 2, let h = Int(bits[0]), let m = Int(bits[1]),
               (0...23).contains(h), (0...59).contains(m) else { return nil }
         return h * 60 + m
-    }
-
-    /// 引用编号圆片：点击跳到对应原始消息（元宝式）
-    @ViewBuilder
-    private func citationChips(_ citations: [Int]) -> some View {
-        let valid = citations.filter { PromptBuilder.message(at: $0, in: messages) != nil }
-        if !valid.isEmpty {
-            let shown = valid.prefix(8)
-            HStack(spacing: 6) {
-                ForEach(Array(shown), id: \.self) { idx in
-                    chip(index: idx)
-                }
-                if valid.count > shown.count {
-                    moreChip(remaining: valid.count - shown.count)
-                }
-                Spacer(minLength: 0)
-            }
-        }
-    }
-
-    private func chip(index: Int) -> some View {
-        Group {
-            if let msg = PromptBuilder.message(at: index, in: messages) {
-                NavigationLink(value: ChatLogTarget(
-                    chatId: chatId, title: chatTitle, dayKey: dayKey,
-                    startMinute: slot.startMinute, endMinute: slot.endMinute,
-                    highlight: msg.id)) {
-                    chipLabel(index)
-                }
-                .buttonStyle(.plain)
-            } else {
-                chipLabel(index)
-            }
-        }
-    }
-
-    private func moreChip(remaining: Int) -> some View {
-        NavigationLink(value: ChatLogTarget(
-            chatId: chatId, title: chatTitle, dayKey: dayKey,
-            startMinute: slot.startMinute, endMinute: slot.endMinute, highlight: nil)) {
-            chipLabel(Text("+\(remaining)"))
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func chipLabel(_ index: Int) -> some View {
-        chipLabel(Text("\(index)").font(.caption2.weight(.semibold)))
-    }
-
-    private func chipLabel(_ content: Text) -> some View {
-        content
-            .foregroundStyle(.tint)
-            .frame(minWidth: 22, minHeight: 22)
-            .background(Circle().fill(Color.accentColor.opacity(0.14)))
     }
 
     private func card<V: View>(@ViewBuilder _ content: () -> V) -> some View {

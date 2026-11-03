@@ -265,6 +265,32 @@ final class TDService: ObservableObject {
         return out
     }
 
+    /// 下载某条消息里的图片（同步等待完成），返回本地文件路径
+    func downloadImage(chatId: Int64, messageId: Int64) async -> String? {
+        guard let client else { return nil }
+        guard let msg = try? await client.getMessage(chatId: chatId, messageId: messageId) else { return nil }
+        var fileId: Int?
+        if case .messagePhoto(let p) = msg.content {
+            fileId = p.photo.sizes.max(by: { $0.width * $0.height < $1.width * $1.height })?.photo.id
+        }
+        guard let fid = fileId else { return nil }
+        // 已下载过就直接用
+        if let cached = imagePaths[fid] { return cached }
+        do {
+            let file = try await client.downloadFile(
+                fileId: fid, limit: 0, offset: 0, priority: 16, synchronous: true)
+            if file.local.isDownloadingCompleted, !file.local.path.isEmpty {
+                imagePaths[fid] = file.local.path
+                return file.local.path
+            }
+        } catch {
+            return nil
+        }
+        return nil
+    }
+
+    private var imagePaths: [Int: String] = [:]
+
     private func displayName(sender: MessageSender?) async -> String {
         switch sender {
         case .messageSenderUser(let u):

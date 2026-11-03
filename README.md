@@ -182,6 +182,7 @@ project.yml                xcodegen 配置（可选）
 
 | 版本 | tag | 要点 |
 |---|---|---|
+| 0.5.2 | [`v0.5.2`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.5.2) | 按需抓取历史日期、记录页看图片、后台刷新、圆片改「查看记录」、模板格式收紧 |
 | 0.5.1 | [`v0.5.1`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.5.1) | 修复同步翻页提前截断+断点照常前进导致的「时段没有文本消息」缺口；升级后首次同步全量重抓 7 天回补 |
 | 0.5.0 | [`v0.5.0`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.5.0) | 总结内容回到元宝话题式（总览+话题卡），要点讲清起因→发展→结论，撤回六板块结构 |
 | 0.4.1 | [`v0.4.1`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.4.1) | 分节解析兼容中文序号（一、/1、）分节，不退化为纯文本 |

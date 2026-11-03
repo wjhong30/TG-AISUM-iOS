@@ -19,26 +19,25 @@ enum PromptBuilder {
 
     /// 内置默认模板：话题化结构 + 消息编号引用，供元宝式卡片解析
     static let defaultTemplate = """
-    你是 Telegram 群聊总结助手。下面给你的聊天记录每条消息都带编号（#n），总结时必须用编号引用。
+    你是 Telegram 群聊总结助手。下面给你的聊天记录每条消息都带编号（#n），总结时用编号引用。
 
-    输出格式（纯文本，严格遵守；禁止 Markdown 记号：不要 #、*、反引号）：
+    输出格式（纯文本，严格遵守；禁止 Markdown 记号：不要 #、*、反引号）。
+    下面是一份正确输出的完整示例（注意：示例里的话题标题是具体内容，不是占位符）：
 
     ■ 总览
-    一句话概括这段聊天（30 字内），句末给出最主要的引用，如 (3)(12)
+    群内主要讨论 iOS 更新与网络方案 (5)(28)
 
-    ■ 标题（HH:MM–HH:MM）
-    · 要点：起因是什么 → 讨论怎么发展 → 最后什么结论或状态 (n)(m)
-    · 要点：另一条要点 (k)
+    ■ iOS 更新讨论（21:02–21:35）
+    · 起因：有人发现新版本描述文件 (33)
+    · 发展：多人实测反馈耗电与流畅度，观点分化 (41)(58)
+    · 结论：建议主力机暂缓升级 (72)
 
-    「标题」要替换成概括该话题的短语（不超过 12 个字，如「风控升级讨论」「新版本测试反馈」），
-    严禁把「标题」二字或占位符原样输出。
-    话题写 2~6 个，按时间顺序；没有实质讨论就不要硬凑。
-
-    硬性规则：
+    仿照上面的示例输出你的总结。规则：
+    - 「■」后必须直接写具体的话题标题（10 字以内、概括内容），严禁输出「标题」二字、括号占位、编号占位
+    - 每个话题的「·」行是纯内容，以「起因：」「发展：」「结论：」开头（有分歧写明谁持什么立场），
+      严禁输出「要点：」二字；行末加引用标记 (n)，n 对应消息编号 #n，编号必须真实存在，禁止编造
     - 时间区间取该话题首末消息的时间
-    - 每个话题的要点要讲清起因、发展、结论；有观点分歧的要写明谁持什么立场
-    - 要点里凡涉及具体发言、结论、链接、文件，句末加引用标记 (n)，n 对应消息编号 #n；可多个，如 (3)(7)
-    - 编号必须真实存在，禁止编造；引用要精准，指向支持该结论的那条消息
+    - 话题写 2~6 个，按时间顺序；没有实质讨论就不要硬凑
     - 要点是归纳提炼，不是流水账复述；消息越多写得越细，不设长度上限
     - 只输出成品，不要模板说明、免责声明
 
@@ -162,7 +161,7 @@ enum PromptBuilder {
     }
 
     private static func makeTopic(id: Int, title: String, lines: [String]) -> SummaryTopic {
-        var displayTitle = title
+        var displayTitle = title.trimmingCharacters(in: .whitespaces)
         var timeRange: String?
 
         // 从标题里抠时间区间：15:20–16:08 / 15:20 - 16:08
@@ -171,6 +170,8 @@ enum PromptBuilder {
             displayTitle = (String(displayTitle[..<r.lowerBound]) + String(displayTitle[r.upperBound...]))
                 .trimmingCharacters(in: CharacterSet(charactersIn: " （）()·-–—~　"))
         }
+        // 剥标题里的占位符残留：「标题 () · 要点：」「标题（」等
+        displayTitle = cleanTitle(displayTitle)
 
         var members: [String] = []
         var rawBullets: [String] = []
@@ -178,7 +179,7 @@ enum PromptBuilder {
             var t = line
             let isBullet = t.hasPrefix("·") || t.hasPrefix("-") || t.hasPrefix("•")
             if isBullet { t = String(t.dropFirst()).trimmingCharacters(in: .whitespaces) }
-            if let r = t.range(of: #"^(要点|内容)\s*[:：]\s*"#, options: .regularExpression) {
+            if let r = t.range(of: #"^(要点|内容|话题)\s*[:：]\s*"#, options: .regularExpression) {
                 t = String(t[r.upperBound...])
             }
             if let r = t.range(of: #"^(成员|参与成员|发言人)\s*[:：]\s*"#, options: .regularExpression) {
@@ -191,7 +192,8 @@ enum PromptBuilder {
                 rawBullets.append(t)
             } else if !rawBullets.isEmpty {
                 rawBullets[rawBullets.count - 1] += " " + t
-            } else if displayTitle.isEmpty {
+            } else if displayTitle.isEmpty || isPlaceholderTitle(displayTitle) {
+                // 标题被模型写成占位符时，用首行内容顶上
                 displayTitle = t
             } else {
                 rawBullets.append(t)
@@ -199,11 +201,36 @@ enum PromptBuilder {
         }
 
         let citations = parseCitations((rawBullets + [displayTitle]).joined(separator: "\n"))
-        // 展示层剥离行内引用编号与残留前后缀，编号只保留在底部圆片里
         let bullets = rawBullets.map { stripInlineCitations($0) }
         displayTitle = fallbackTitleIfNeeded(displayTitle, bullets: bullets, id: id)
         return SummaryTopic(id: id, title: displayTitle, timeRange: timeRange,
                             members: members, bullets: bullets, citations: citations)
+    }
+
+    /// 占位符式标题：「标题」「话题标题」「标题 ()」等
+    private static func isPlaceholderTitle(_ t: String) -> Bool {
+        let cleaned = t.replacingOccurrences(of: #"[（(]\s*[)）]"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        return cleaned.isEmpty || cleaned == "标题" || cleaned == "话题" || cleaned == "话题标题"
+    }
+
+    /// 剥掉标题开头的占位符/前缀垃圾：「标题 () · 要点：」「标题（」「话题标题：」等
+    private static func cleanTitle(_ raw: String) -> String {
+        var t = raw
+        // 去掉开头的占位词（可能反复出现）
+        for _ in 0..<3 {
+            guard let r = t.range(of: #"^\s*(标题|话题标题|话题)\s*[（(·:：]?\s*[）)]?\s*"#, options: .regularExpression),
+                  r.lowerBound == t.startIndex else { break }
+            t = String(t[r.upperBound...])
+        }
+        // 去掉残留的分隔符与「要点：」
+        t = t.replacingOccurrences(of: #"^\s*[·•\-—]\s*"#, with: "", options: .regularExpression)
+        if let r = t.range(of: #"^\s*要点\s*[:：]\s*"#, options: .regularExpression) {
+            t = String(t[r.upperBound...])
+        }
+        // 尾部没收拢的括号
+        if t.hasSuffix("（") || t.hasSuffix("(") { t = String(t.dropLast()) }
+        return t.trimmingCharacters(in: .whitespaces)
     }
 
     /// 去掉行内引用标记 (n)（含前置空白），只留正文
@@ -214,9 +241,8 @@ enum PromptBuilder {
 
     /// 模型把占位符原样抄下来时，用第一条要点生成标题；再不行给个序号标题
     private static func fallbackTitleIfNeeded(_ title: String, bullets: [String], id: Int) -> String {
-        let t = stripInlineCitations(title).trimmingCharacters(in: .whitespaces)
-        let isPlaceholder = t.isEmpty || t.contains("话题标题") || t == "标题" || t == "话题" || t.hasPrefix("<")
-        guard isPlaceholder else { return t }
+        let t = stripInlineCitations(title)
+        guard isPlaceholderTitle(t) || t.hasPrefix("<") || t.contains("话题标题") else { return t }
         guard let first = bullets.first(where: { !$0.isEmpty }) else { return "话题 \(id)" }
         let head = String(first.prefix(16))
         if let r = head.rangeOfCharacter(from: CharacterSet(charactersIn: "，。；、：,.;:")) {
