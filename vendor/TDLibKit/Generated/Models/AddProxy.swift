@@ -1,0 +1,36 @@
+//
+//  AddProxy.swift
+//  tl2swift
+//
+//  Generated automatically. Any changes will be lost!
+//  Based on TDLib 1.8.69-4c6377aa
+//  https://github.com/tdlib/td/tree/4c6377aa
+//
+
+import Foundation
+
+
+/// Adds a proxy server for network requests. Can be called before authorization
+public struct AddProxy: Codable, Equatable, Hashable {
+
+    /// Comment to set for the proxy
+    public let comment: String?
+
+    /// Pass true to immediately enable the proxy
+    public let enable: Bool?
+
+    /// The proxy to add
+    public let proxy: Proxy?
+
+
+    public init(
+        comment: String?,
+        enable: Bool?,
+        proxy: Proxy?
+    ) {
+        self.comment = comment
+        self.enable = enable
+        self.proxy = proxy
+    }
+}
+

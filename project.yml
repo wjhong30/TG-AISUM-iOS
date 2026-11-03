@@ -1,0 +1,37 @@
+name: TGAISUM
+options:
+  bundleIdPrefix: com.tgaisum
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+packages:
+  TDLibKit:
+    url: https://github.com/Swiftgram/TDLibKit
+    exactVersion: 1.5.2-tdlib-1.8.69-4c6377aa
+settings:
+  base:
+    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    SWIFT_VERSION: "5.9"
+    CODE_SIGNING_ALLOWED: "NO"
+    CODE_SIGN_IDENTITY: ""
+    CODE_SIGNING_REQUIRED: "NO"
+targets:
+  TGAISUM:
+    type: application
+    platform: iOS
+    sources:
+      - TGAISUM
+    dependencies:
+      - package: TDLibKit
+    info:
+      path: TGAISUM/Info.plist
+      properties:
+        CFBundleDisplayName: TG-AISUM
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        ITSAppUsesNonExemptEncryption: false

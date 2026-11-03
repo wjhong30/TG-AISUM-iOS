@@ -1,0 +1,4 @@
+module TDLibShim {
+    header "shim.h"
+    export *
+}

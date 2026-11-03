@@ -1,0 +1,31 @@
+//
+//  SetSupergroupMainProfileTab.swift
+//  tl2swift
+//
+//  Generated automatically. Any changes will be lost!
+//  Based on TDLib 1.8.69-4c6377aa
+//  https://github.com/tdlib/td/tree/4c6377aa
+//
+
+import Foundation
+
+
+/// Changes the main profile tab of the channel; requires can_change_info administrator right
+public struct SetSupergroupMainProfileTab: Codable, Equatable, Hashable {
+
+    /// The new value of the main profile tab
+    public let mainProfileTab: ProfileTab?
+
+    /// Identifier of the channel
+    public let supergroupId: Int64?
+
+
+    public init(
+        mainProfileTab: ProfileTab?,
+        supergroupId: Int64?
+    ) {
+        self.mainProfileTab = mainProfileTab
+        self.supergroupId = supergroupId
+    }
+}
+

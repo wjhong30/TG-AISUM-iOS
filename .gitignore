@@ -1,0 +1,20 @@
+# 构建产物
+build/
+*.ipa
+*.app/
+
+# Xcode 生成物（用 xcodegen 从 project.yml 生成）
+TGAISUM.xcodeproj/
+DerivedData/
+xcuserdata/
+
+# 本地数据与密钥
+.env
+*.session
+*.session-journal
+chat_logs/
+summaries.json
+archive/
+
+# 系统
+.DS_Store
