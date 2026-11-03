@@ -181,6 +181,7 @@ project.yml                xcodegen 配置（可选）
 
 | 版本 | tag | 要点 |
 |---|---|---|
+| 0.3.1 | [`v0.3.1`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.3.1) | 修复话题标题占位符照抄；行内引用编号只留圆片；话题时间区间可点击查看该段记录 |
 | 0.3.0 | [`v0.3.0`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.3.0) | QQ 式聊天列表 + 元宝式话题卡片总结页、引用编号直达原始群聊记录、>100 条才自动重算的省 token 策略 |
 | 0.2.0 | [`v0.2.0`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.2.0) | 四时段 + 自定义、我的总结清单、可编辑提示词模板、输出去 markdown 并排版 |
 | 0.1.2 | [`v0.1.2`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.1.2) | 修复授权事件解码，登录端到端可用 |

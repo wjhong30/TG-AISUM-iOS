@@ -249,27 +249,18 @@ struct GroupSummaryView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 if let tr = topic.timeRange {
-                    Text(tr)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if !topic.members.isEmpty {
-                HStack(spacing: 6) {
-                    Image(systemName: "person.2")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    ForEach(topic.members.prefix(5), id: \.self) { name in
-                        Text(name)
-                            .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(Color(uiColor: .tertiarySystemFill),
-                                        in: Capsule())
-                    }
-                    if topic.members.count > 5 {
-                        Text("等 \(topic.members.count) 人")
+                    if let target = topicLogTarget(topic) {
+                        NavigationLink(value: target) {
+                            Text(tr)
+                                .font(.caption)
+                                .foregroundStyle(.tint)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Color.accentColor.opacity(0.12), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        Text(tr)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -295,6 +286,25 @@ struct GroupSummaryView: View {
         .padding(14)
         .background(Color(uiColor: .secondarySystemGroupedBackground),
                     in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    /// 话题时间区间 → 该时段的原始记录页
+    private func topicLogTarget(_ topic: PromptBuilder.SummaryTopic) -> ChatLogTarget? {
+        guard let tr = topic.timeRange else { return nil }
+        let parts = tr.components(separatedBy: CharacterSet(charactersIn: "–—~－-至到"))
+        guard parts.count == 2,
+              let start = parseClock(parts[0]),
+              let end = parseClock(parts[1]),
+              end > start else { return nil }
+        return ChatLogTarget(chatId: chatId, title: chatTitle, dayKey: dayKey,
+                             startMinute: start, endMinute: end, highlight: nil)
+    }
+
+    private func parseClock(_ s: String) -> Int? {
+        let bits = s.trimmingCharacters(in: .whitespaces).split(separator: ":")
+        guard bits.count == 2, let h = Int(bits[0]), let m = Int(bits[1]),
+              (0...23).contains(h), (0...59).contains(m) else { return nil }
+        return h * 60 + m
     }
 
     /// 引用编号圆片：点击跳到对应原始消息（元宝式）

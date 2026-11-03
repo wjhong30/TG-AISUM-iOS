@@ -26,15 +26,16 @@ enum PromptBuilder {
     ■ 总览
     一句话概括这段聊天（30 字内），句末给出最主要的引用，如 (3)(12)
 
-    ■ 话题标题（HH:MM–HH:MM）
-    · 成员：@甲、@乙
+    ■ 标题（HH:MM–HH:MM）
     · 要点：这个话题聊了什么、得出什么结论 (n)(m)
     · 要点：另一条要点 (k)
 
+    「标题」要替换成概括该话题的短语（不超过 12 个字，如「风控升级讨论」「新版本测试反馈」），
+    严禁把「标题」二字或占位符原样输出。
     话题写 2~6 个，按时间顺序；没有实质讨论就不要硬凑。
 
     硬性规则：
-    - 每个话题的「成员」行列出主要发言人（2~5 人）；时间区间取该话题首末消息的时间
+    - 时间区间取该话题首末消息的时间
     - 要点里凡涉及具体发言、结论、链接、文件，句末加引用标记 (n)，n 对应消息编号 #n；可多个，如 (3)(7)
     - 编号必须真实存在，禁止编造；引用要精准，指向支持该结论的那条消息
     - 要点写结论和信息，不要复述寒暄；消息越多写得越细，不设长度上限
@@ -171,11 +172,14 @@ enum PromptBuilder {
         }
 
         var members: [String] = []
-        var bullets: [String] = []
+        var rawBullets: [String] = []
         for line in lines {
             var t = line
             let isBullet = t.hasPrefix("·") || t.hasPrefix("-") || t.hasPrefix("•")
             if isBullet { t = String(t.dropFirst()).trimmingCharacters(in: .whitespaces) }
+            if let r = t.range(of: #"^(要点|内容)\s*[:：]\s*"#, options: .regularExpression) {
+                t = String(t[r.upperBound...])
+            }
             if let r = t.range(of: #"^(成员|参与成员|发言人)\s*[:：]\s*"#, options: .regularExpression) {
                 let body = String(t[r.upperBound...])
                 members.append(contentsOf: body
@@ -183,20 +187,42 @@ enum PromptBuilder {
                     .map { $0.trimmingCharacters(in: .whitespaces) }
                     .filter { !$0.isEmpty })
             } else if isBullet {
-                bullets.append(t)
-            } else if !bullets.isEmpty {
-                bullets[bullets.count - 1] += " " + t
+                rawBullets.append(t)
+            } else if !rawBullets.isEmpty {
+                rawBullets[rawBullets.count - 1] += " " + t
             } else if displayTitle.isEmpty {
                 displayTitle = t
             } else {
-                bullets.append(t)
+                rawBullets.append(t)
             }
         }
 
-        let allText = (bullets + [displayTitle]).joined(separator: "\n")
-        let citations = parseCitations(allText)
+        let citations = parseCitations((rawBullets + [displayTitle]).joined(separator: "\n"))
+        // 展示层剥离行内引用编号与残留前后缀，编号只保留在底部圆片里
+        let bullets = rawBullets.map { stripInlineCitations($0) }
+        displayTitle = fallbackTitleIfNeeded(displayTitle, bullets: bullets, id: id)
         return SummaryTopic(id: id, title: displayTitle, timeRange: timeRange,
                             members: members, bullets: bullets, citations: citations)
+    }
+
+    /// 去掉行内引用标记 (n)（含前置空白），只留正文
+    static func stripInlineCitations(_ text: String) -> String {
+        text.replacingOccurrences(of: #"\s*[（(]\d{1,4}[)）]"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+    }
+
+    /// 模型把占位符原样抄下来时，用第一条要点生成标题；再不行给个序号标题
+    private static func fallbackTitleIfNeeded(_ title: String, bullets: [String], id: Int) -> String {
+        let t = stripInlineCitations(title).trimmingCharacters(in: .whitespaces)
+        let isPlaceholder = t.isEmpty || t.contains("话题标题") || t == "标题" || t == "话题" || t.hasPrefix("<")
+        guard isPlaceholder else { return t }
+        guard let first = bullets.first(where: { !$0.isEmpty }) else { return "话题 \(id)" }
+        let head = String(first.prefix(16))
+        if let r = head.rangeOfCharacter(from: CharacterSet(charactersIn: "，。；、：,.;:")) {
+            let cut = String(head[..<r.lowerBound])
+            if cut.count >= 4 { return cut }
+        }
+        return head
     }
 
     /// 从文本里抽引用编号：(3) / （12），支持 (3)(7) 连写；越界由调用方按消息数过滤
