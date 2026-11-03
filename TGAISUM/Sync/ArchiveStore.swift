@@ -89,6 +89,11 @@ final class SyncService: ObservableObject {
     /// 同步指定群：首次抓近 7 天，此后增量（多回看 1 小时防边界遗漏）
     func syncAll(chatIds: [Int64]) async {
         guard !syncing else { return }
+        // v0.5.1 一次性全量重抓 7 天：修复历史版本翻页截断留下的缺口
+        if !UserDefaults.standard.bool(forKey: "resync7d.v1") {
+            UserDefaults.standard.set(true, forKey: "resync7d.v1")
+            lastSync.removeAll()
+        }
         syncing = true
         defer { syncing = false }
         for chatId in chatIds {
@@ -97,9 +102,12 @@ final class SyncService: ObservableObject {
             let windowStart = Int(last.addingTimeInterval(-3600).timeIntervalSince1970)
             let msgs = await TDService.shared.fetchMessages(chatId: chatId, stopBeforeDate: windowStart)
             ArchiveStore.shared.merge(chatId, msgs)
-            let total = ArchiveStore.shared.load(chatId).count
-            ArchiveStore.shared.syncState[chatId] = "已归档 \(total) 条"
-            lastSync[chatId] = Date()
+            let archived = ArchiveStore.shared.load(chatId)
+            // 断点取实际归档的最新一条消息时间：同步被截断/失败时缺口会在下次自动回补
+            if let newest = archived.map(\.date).max() {
+                lastSync[chatId] = Date(timeIntervalSince1970: TimeInterval(newest))
+            }
+            ArchiveStore.shared.syncState[chatId] = "已归档 \(archived.count) 条\(msgs.isEmpty ? "" : "（本次新增 \(msgs.count) 条）")"
             persistLastSync()
         }
     }

@@ -46,7 +46,8 @@ Telegram 群聊 AI 总结的 iPhone 客户端。定位与 [TG-AISUM Desktop](htt
 - 清单可逐条移除、一键清空；顶部按钮触发增量同步。
 
 **同步**
-- TDLib `getChatHistory` 反向翻页（每页 100 条，按消息 id 去重），增量窗口取「上次同步时间 − 1 小时」，首次同步抓 7 天。
+- TDLib `getChatHistory` 反向翻页（每页 100 条，按消息 id 去重），增量窗口取「上次同步时间 − 1 小时」，首次同步抓 7 天；
+  翻页不以单批数量为结束依据（TDLib 单批常少于 100 条），同步断点记实际归档的最新消息时间，截断自动回补。
 - 归档落盘为 `Documents/archive/chat_{chatId}.json`；默认不下载媒体，媒体消息以 `[图片]` 之类占位文本入库。
 
 **设置页**
@@ -181,6 +182,7 @@ project.yml                xcodegen 配置（可选）
 
 | 版本 | tag | 要点 |
 |---|---|---|
+| 0.5.1 | [`v0.5.1`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.5.1) | 修复同步翻页提前截断+断点照常前进导致的「时段没有文本消息」缺口；升级后首次同步全量重抓 7 天回补 |
 | 0.5.0 | [`v0.5.0`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.5.0) | 总结内容回到元宝话题式（总览+话题卡），要点讲清起因→发展→结论，撤回六板块结构 |
 | 0.4.1 | [`v0.4.1`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.4.1) | 分节解析兼容中文序号（一、/1、）分节，不退化为纯文本 |
 | 0.4.0 | [`v0.4.0`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.4.0) | 总结内容回归桌面版六板块深度报告（消息统计/核心话题/时间线/成员观点/技术汇总/趋势/待解决），元宝卡片式渲染 |

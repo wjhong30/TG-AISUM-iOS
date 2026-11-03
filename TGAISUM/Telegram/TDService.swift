@@ -231,6 +231,7 @@ final class TDService: ObservableObject {
         guard let client else { return [] }
         var out: [ArchiveMessage] = []
         var fromId: Int64 = 0
+        var lastOldestId: Int64 = -1
         while out.count < maxMessages {
             let batch: Messages
             do {
@@ -245,7 +246,7 @@ final class TDService: ObservableObject {
             for m in msgs {
                 if m.date < stopBeforeDate {
                     reachedEnd = true
-                    continue
+                    break
                 }
                 let sender = await displayName(sender: m.senderId)
                 let (text, isMedia) = Self.extract(content: m.content)
@@ -253,7 +254,13 @@ final class TDService: ObservableObject {
                 fromId = m.id
             }
             if reachedEnd { break }
-            if msgs.count < 100 { break }
+            // TDLib 单批常返回少于 limit 但仍有更多历史，不能按数量判断结束；
+            // 只有最旧消息 id 不再前进（防死循环）才停
+            if let oldest = msgs.last?.id {
+                if oldest == lastOldestId { break }
+                lastOldestId = oldest
+                fromId = oldest
+            }
         }
         return out
     }
