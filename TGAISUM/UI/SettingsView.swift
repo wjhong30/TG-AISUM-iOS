@@ -46,6 +46,29 @@ struct SettingsView: View {
                     Text("LLM 节点（OpenAI 兼容，按顺序轮询）")
                 }
 
+                Section("代理（直连不通时使用）") {
+                    Toggle("启用代理", isOn: $settings.proxyEnabled)
+                    if settings.proxyEnabled {
+                        Picker("类型", selection: $settings.proxyType) {
+                            Text("SOCKS5").tag("socks5")
+                            Text("HTTP").tag("http")
+                        }
+                        .pickerStyle(.segmented)
+                        TextField("服务器", text: $settings.proxyServer)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                        TextField("端口", value: $settings.proxyPort, format: .number)
+                            .keyboardType(.numberPad)
+                        TextField("用户名（可选）", text: $settings.proxyUser)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                        SecureField("密码（可选）", text: $settings.proxyPassword)
+                        Text("修改代理后需退出登录重新连接（或重启 App）。")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Section("总结") {
                     TextField("输出风格要求", text: $settings.summaryStyle, axis: .vertical)
                         .lineLimit(2...4)

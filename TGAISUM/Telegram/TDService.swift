@@ -16,11 +16,14 @@ final class TDService: ObservableObject {
     static let shared = TDService()
 
     @Published var authState: AuthUIState = .idle
+    @Published var lastEvent: String = ""
+    @Published var eventLog: [String] = []
 
     private var manager: TDLibClientManager?
     private var client: TDLibClient?
     private var started = false
     private var nameCache: [Int64: String] = [:]
+    private var connectTimer: Timer?
 
     private var docs: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -34,6 +37,19 @@ final class TDService: ObservableObject {
         }
         started = true
         authState = .connecting
+        lastEvent = ""
+        eventLog = []
+        connectTimer?.invalidate()
+        connectTimer = Timer.scheduledTimer(withTimeInterval: 25, repeats: false) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.authState == .connecting else { return }
+                self.appendLog("⏱ 25 秒仍无任何 Telegram 事件")
+                self.authState = .failed(
+                    "连接超时：25 秒内 TDLib 没有收到任何事件。" +
+                    "如果下方事件日志为空，多半是本 App 无法直连 Telegram 服务器" +
+                    "（即使官方客户端能连——它可能走了应用内代理）。可在设置里尝试配置代理。")
+            }
+        }
         let manager = TDLibClientManager()
         self.manager = manager
         client = manager.createClient { [weak self] data, _ in
@@ -41,11 +57,37 @@ final class TDService: ObservableObject {
         }
     }
 
-    private nonisolated func handleUpdate(_ data: Data) {
-        guard let update = try? JSONDecoder().decode(Update.self, from: data) else { return }
-        guard case .updateAuthorizationState(let s) = update else { return }
+    private nonisolated func appendLog(_ line: String) {
         Task { @MainActor [weak self] in
-            await self?.apply(state: s.authorizationState)
+            guard let self else { return }
+            self.lastEvent = line
+            self.eventLog.append(line)
+            if self.eventLog.count > 12 {
+                self.eventLog.removeFirst(self.eventLog.count - 12)
+            }
+        }
+    }
+
+    private nonisolated func handleUpdate(_ data: Data) {
+        guard let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            appendLog("⚠️ 无法解析的原始数据（\(data.count) 字节）")
+            return
+        }
+        let type = dict["@type"] as? String ?? "?"
+        if type == "updateAuthorizationState" {
+            appendLog("📩 \(type)")
+            if let update = try? JSONDecoder().decode(Update.self, from: data),
+               case .updateAuthorizationState(let s) = update {
+                Task { @MainActor [weak self] in
+                    await self?.apply(state: s.authorizationState)
+                }
+            } else {
+                appendLog("⚠️ 授权状态事件解码失败")
+            }
+        } else if type.hasPrefix("update") {
+            appendLog("· \(type)")
+        } else {
+            appendLog("· \(type)")
         }
     }
 
@@ -56,7 +98,7 @@ final class TDService: ObservableObject {
                 try await client?.setTdlibParameters(
                     apiHash: AppSettings.shared.apiHash,
                     apiId: AppSettings.shared.apiId,
-                    applicationVersion: "0.1.0",
+                    applicationVersion: "0.1.1",
                     databaseDirectory: docs.appendingPathComponent("td-db", isDirectory: true).path,
                     databaseEncryptionKey: nil,
                     deviceModel: "iPhone",
@@ -69,6 +111,7 @@ final class TDService: ObservableObject {
                     useSecretChats: false,
                     useTestDc: false
                 )
+                await applyProxyIfNeeded()
             } catch {
                 authState = .failed("初始化失败: \(error.localizedDescription)")
             }
@@ -85,6 +128,7 @@ final class TDService: ObservableObject {
         case .authorizationStateWaitEmailCode:
             authState = .failed("该账号开启了邮箱验证，暂不支持，请先用官方客户端处理")
         case .authorizationStateReady:
+            connectTimer?.invalidate()
             authState = .ready
         case .authorizationStateClosed, .authorizationStateLoggingOut, .authorizationStateClosing:
             if state != .authorizationStateLoggingOut {
@@ -96,6 +140,30 @@ final class TDService: ObservableObject {
             }
         default:
             break
+        }
+    }
+
+    private func applyProxyIfNeeded() async {
+        let s = AppSettings.shared
+        guard s.proxyEnabled, !s.proxyServer.isEmpty, s.proxyPort > 0, let client else { return }
+        let type: ProxyType
+        if s.proxyType == "http" {
+            type = .proxyTypeHttp(ProxyTypeHttp(
+                httpOnly: false,
+                password: s.proxyPassword,
+                username: s.proxyUser))
+        } else {
+            type = .proxyTypeSocks5(ProxyTypeSocks5(
+                password: s.proxyPassword,
+                username: s.proxyUser))
+        }
+        do {
+            _ = try await client.addProxy(
+                comment: nil, enable: true,
+                proxy: Proxy(port: s.proxyPort, server: s.proxyServer, type: type))
+            appendLog("🔀 已启用代理 \(s.proxyServer):\(s.proxyPort)")
+        } catch {
+            appendLog("⚠️ 代理设置失败: \(error.localizedDescription)")
         }
     }
 

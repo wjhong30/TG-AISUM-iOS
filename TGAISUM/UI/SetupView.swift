@@ -70,11 +70,39 @@ struct SetupView: View {
                 }
 
                 if td.authState == .connecting {
-                    Section {
+                    Section("连接 Telegram…") {
                         HStack(spacing: 10) {
                             ProgressView()
-                            Text("连接 Telegram…")
+                            Text("等待 TDLib 事件")
                         }
+                        ForEach(td.eventLog, id: \.self) { line in
+                            Text(line)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Section("代理（可选，直连不通时使用）") {
+                    Toggle("启用代理", isOn: $settings.proxyEnabled)
+                    if settings.proxyEnabled {
+                        Picker("类型", selection: $settings.proxyType) {
+                            Text("SOCKS5").tag("socks5")
+                            Text("HTTP").tag("http")
+                        }
+                        .pickerStyle(.segmented)
+                        TextField("服务器", text: $settings.proxyServer)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                        TextField("端口", value: $settings.proxyPort, format: .number)
+                            .keyboardType(.numberPad)
+                        TextField("用户名（可选）", text: $settings.proxyUser)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                        SecureField("密码（可选）", text: $settings.proxyPassword)
+                        Text("代理在「开始登录」时生效；已开始连接的话请返回重进。")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -83,6 +111,11 @@ struct SetupView: View {
                         Text(msg)
                             .foregroundStyle(.red)
                             .font(.callout)
+                        ForEach(td.eventLog, id: \.self) { line in
+                            Text(line)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
 
