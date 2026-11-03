@@ -76,7 +76,7 @@ final class TDService: ObservableObject {
         let type = dict["@type"] as? String ?? "?"
         if type == "updateAuthorizationState" {
             appendLog("📩 \(type)")
-            if let update = try? JSONDecoder().decode(Update.self, from: data),
+            if let update = try? Self.decoder.decode(Update.self, from: data),
                case .updateAuthorizationState(let s) = update {
                 Task { @MainActor [weak self] in
                     await self?.apply(state: s.authorizationState)
@@ -90,6 +90,12 @@ final class TDService: ObservableObject {
             appendLog("· \(type)")
         }
     }
+
+    private static let decoder: JSONDecoder = {
+        let d = JSONDecoder()
+        d.keyDecodingStrategy = .convertFromSnakeCase
+        return d
+    }()
 
     private func apply(state: AuthorizationState) async {
         switch state {
