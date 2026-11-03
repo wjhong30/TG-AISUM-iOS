@@ -169,18 +169,14 @@ struct GroupSummaryView: View {
         if generating {
             generatingCard
         } else if let s = summary, let p = parsed {
-            if p.sections.isEmpty {
+            if p.topics.isEmpty && p.overview == nil {
                 card { RichTextView(raw: p.plain) }
             } else {
-                if let stats = p.stats {
-                    card {
-                        Text(stats)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                if let o = p.overview {
+                    overviewCard(o)
                 }
-                ForEach(p.sections) { section in
-                    sectionCard(section)
+                ForEach(p.topics) { topic in
+                    topicCard(topic)
                 }
             }
             HStack {
@@ -226,37 +222,89 @@ struct GroupSummaryView: View {
                     in: RoundedRectangle(cornerRadius: 14))
     }
 
-    private func sectionCard(_ section: PromptBuilder.SummarySection) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(section.title)
-                .font(.headline)
-                .fixedSize(horizontal: false, vertical: true)
+    private func overviewCard(_ topic: PromptBuilder.SummaryTopic) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(topic.bullets.enumerated()), id: \.offset) { _, line in
+                Text(line)
+                    .font(.callout.weight(.medium))
+                    .lineSpacing(3)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if topic.bullets.isEmpty, !topic.title.isEmpty {
+                Text(topic.title).font(.callout.weight(.medium))
+            }
+            citationChips(topic.citations)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(Color.accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 14))
+    }
 
-            if section.bullets == ["无"] {
-                Text("无")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(Array(section.bullets.enumerated()), id: \.offset) { _, line in
-                    HStack(alignment: .top, spacing: 6) {
-                        Circle().fill(Color.accentColor.opacity(0.6))
-                            .frame(width: 5, height: 5)
-                            .padding(.top, 7)
-                        Text(line)
-                            .font(.callout)
-                            .lineSpacing(3)
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
+    private func topicCard(_ topic: PromptBuilder.SummaryTopic) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(topic.title)
+                    .font(.headline)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                if let tr = topic.timeRange {
+                    if let target = topicLogTarget(topic) {
+                        NavigationLink(value: target) {
+                            Text(tr)
+                                .font(.caption)
+                                .foregroundStyle(.tint)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Color.accentColor.opacity(0.12), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        Text(tr)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
 
-            citationChips(section.citations)
+            ForEach(Array(topic.bullets.enumerated()), id: \.offset) { _, line in
+                HStack(alignment: .top, spacing: 6) {
+                    Circle().fill(Color.accentColor.opacity(0.6))
+                        .frame(width: 5, height: 5)
+                        .padding(.top, 7)
+                    Text(line)
+                        .font(.callout)
+                        .lineSpacing(3)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            citationChips(topic.citations)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .background(Color(uiColor: .secondarySystemGroupedBackground),
                     in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    /// 话题时间区间 → 该时段的原始记录页
+    private func topicLogTarget(_ topic: PromptBuilder.SummaryTopic) -> ChatLogTarget? {
+        guard let tr = topic.timeRange else { return nil }
+        let parts = tr.components(separatedBy: CharacterSet(charactersIn: "–—~－-至到"))
+        guard parts.count == 2,
+              let start = parseClock(parts[0]),
+              let end = parseClock(parts[1]),
+              end > start else { return nil }
+        return ChatLogTarget(chatId: chatId, title: chatTitle, dayKey: dayKey,
+                             startMinute: start, endMinute: end, highlight: nil)
+    }
+
+    private func parseClock(_ s: String) -> Int? {
+        let bits = s.trimmingCharacters(in: .whitespaces).split(separator: ":")
+        guard bits.count == 2, let h = Int(bits[0]), let m = Int(bits[1]),
+              (0...23).contains(h), (0...59).contains(m) else { return nil }
+        return h * 60 + m
     }
 
     /// 引用编号圆片：点击跳到对应原始消息（元宝式）
