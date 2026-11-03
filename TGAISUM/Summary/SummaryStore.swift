@@ -69,6 +69,9 @@ final class SummaryStore: ObservableObject {
             generating.insert(key)
         } else {
             generating.remove(key)
+            if generating.isEmpty {
+                BackgroundGuard.release()
+            }
         }
     }
 
@@ -101,22 +104,30 @@ enum SummaryService {
         }
         SummaryStore.shared.setGenerating(key, true)
         SummaryStore.shared.errors.removeValue(forKey: key)
+        let (system, user) = PromptBuilder.build(
+            groupName: chatTitle, dayKey: dayKey, slot: slot, messages: messages)
+        var text: String?
         do {
-            let (system, user) = PromptBuilder.build(
-                groupName: chatTitle, dayKey: dayKey, slot: slot, messages: messages)
-            let text = try await LLMClient.shared.summarize(system: system, user: user)
-            SummaryStore.shared.save(CachedSummary(
-                chatId: chatId,
-                dayKey: dayKey,
-                slotKey: slot.key,
-                text: text,
-                msgCount: messages.count,
-                generatedAt: Date(),
-                model: AppSettings.shared.llmNodes.first?.model ?? "?"
-            ))
+            text = try await LLMClient.shared.summarize(system: system, user: user)
         } catch {
-            SummaryStore.shared.setError(key, error.localizedDescription)
+            // 网络抖动自动重试一次，仍失败才报错
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            text = try? await LLMClient.shared.summarize(system: system, user: user)
+            if text == nil {
+                SummaryStore.shared.setError(key, error.localizedDescription)
+                SummaryStore.shared.setGenerating(key, false)
+                return
+            }
         }
+        SummaryStore.shared.save(CachedSummary(
+            chatId: chatId,
+            dayKey: dayKey,
+            slotKey: slot.key,
+            text: text!,
+            msgCount: messages.count,
+            generatedAt: Date(),
+            model: AppSettings.shared.llmNodes.first?.model ?? "?"
+        ))
         SummaryStore.shared.setGenerating(key, false)
     }
 }

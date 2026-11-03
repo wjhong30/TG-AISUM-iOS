@@ -1,4 +1,5 @@
 import SwiftUI
+import QuickLook
 
 /// 引用跳转目标：群 + 天 + 时段 + 要高亮的消息
 struct ChatLogTarget: Hashable {
@@ -76,6 +77,8 @@ struct ChatLogView: View {
                 }
                 if m.isImage {
                     ImageBubble(chatId: target.chatId, messageId: m.id) { fullscreenImage = $0 }
+                } else if m.isFile {
+                    FileBubble(chatId: target.chatId, messageId: m.id)
                 } else {
                     Text(m.text)
                         .font(.subheadline)
@@ -95,6 +98,7 @@ struct ChatLogView: View {
 
 extension ArchiveMessage {
     var isImage: Bool { text == "[图片]" }
+    var isFile: Bool { text == "[文件]" }
 }
 
 /// 图片气泡：懒加载下载，加载完成显示缩略图，点击全屏
@@ -176,6 +180,138 @@ private struct ImageViewer: View {
                     .foregroundStyle(.white.opacity(0.6))
                     .padding(.bottom, 12)
             }
+        }
+    }
+}
+
+/// 文件气泡：点按下载，下载后可预览、分享、保存到「文件」
+private struct FileBubble: View {
+    let chatId: Int64
+    let messageId: Int64
+
+    @State private var file: TDService.DownloadedFile?
+    @State private var loading = false
+    @State private var failed = false
+    @State private var showActions = false
+    @State private var shareItem: URLPayload?
+    @State private var previewItem: URLPayload?
+
+    var body: some View {
+        Button {
+            if file != nil {
+                showActions = true
+            } else {
+                load()
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "doc.fill")
+                    .font(.title3)
+                    .foregroundStyle(Color.accentColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(file?.name ?? "文件")
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(1)
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                if loading {
+                    ProgressView()
+                } else {
+                    Image(systemName: file == nil ? "arrow.down.circle" : "ellipsis.circle")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 9)
+            .frame(maxWidth: 250, alignment: .leading)
+            .background(Color(uiColor: .secondarySystemGroupedBackground),
+                        in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .confirmationDialog(file?.name ?? "文件", isPresented: $showActions, titleVisibility: .visible) {
+            Button("预览") { previewItem = file.map { URLPayload(url: $0.url) } }
+            Button("分享 / 保存到文件") { shareItem = file.map { URLPayload(url: $0.url) } }
+            Button("取消", role: .cancel) {}
+        }
+        .sheet(item: $previewItem) { p in
+            QuickLookView(url: p.url)
+                .ignoresSafeArea()
+        }
+        .sheet(item: $shareItem) { p in
+            ActivityShareView(items: [p.url])
+        }
+    }
+
+    private var subtitle: String {
+        if loading { return "下载中…" }
+        if let f = file {
+            let fmt = ByteCountFormatter()
+            fmt.countStyle = .file
+            return fmt.string(fromByteCount: f.size)
+        }
+        if failed { return "下载失败，点按重试" }
+        return "点按下载查看"
+    }
+
+    private func load() {
+        guard !loading else { return }
+        loading = true
+        failed = false
+        Task {
+            let f = await TDService.shared.downloadDocument(chatId: chatId, messageId: messageId)
+            loading = false
+            if let f {
+                file = f
+                showActions = true
+            } else {
+                failed = true
+            }
+        }
+    }
+}
+
+struct URLPayload: Identifiable {
+    let url: URL
+    var id: String { url.absoluteString }
+}
+
+/// 系统分享面板：含「保存到文件」、拷贝、隔空投送等
+struct ActivityShareView: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
+}
+
+/// Quick Look 预览：PDF/图片/文本/Office 等系统可直接预览的格式
+struct QuickLookView: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeCoordinator() -> Coordinator { Coordinator(url: url) }
+
+    func makeUIViewController(context: Context) -> QLPreviewController {
+        let c = QLPreviewController()
+        c.dataSource = context.coordinator
+        return c
+    }
+
+    func updateUIViewController(_ c: QLPreviewController, context: Context) {
+        c.reloadData()
+    }
+
+    final class Coordinator: NSObject, QLPreviewControllerDataSource {
+        let url: URL
+        init(url: URL) { self.url = url }
+        func numberOfPreviewItems(in controller: QLPreviewController) -> Int { 1 }
+        func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
+            url as QLPreviewItem
         }
     }
 }

@@ -9,7 +9,7 @@ cd "$ROOT"
 SDK=$(xcrun -sdk iphoneos --show-sdk-path)
 TARGET=arm64-apple-ios16.0
 APP_NAME=TGAISUM
-BUILD=build/swiftc
+BUILD="$ROOT/build/swiftc"
 VENDOR=$ROOT/vendor
 
 mkdir -p "$BUILD"
@@ -102,6 +102,9 @@ rm -rf "$BUILD/Payload"
 mkdir -p "$STAGE"
 cp "$BUILD/$APP_NAME" "$STAGE/$APP_NAME"
 cp Info_plist_template.plist "$STAGE/Info.plist"
+if [ -d "$ROOT/assets" ]; then
+  cp "$ROOT"/assets/AppIcon*.png "$STAGE/" 2>/dev/null || true
+fi
 
 if [ "$DYNAMIC" -gt 0 ]; then
   mkdir -p "$STAGE/Frameworks"

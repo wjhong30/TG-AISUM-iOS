@@ -18,6 +18,7 @@ struct GroupSummaryView: View {
     @State private var fetchingDay = false
     /// 已尝试补抓过的日期（避免无消息的日期反复触发抓取）
     @State private var fetchedDays: Set<String> = []
+    @State private var shareText: TextPayload?
 
     private var dayKey: String { DayUtil.dayKey(day) }
     private var slot: SlotRange { slotMode.range(customStart: customStart, customEnd: customEnd) }
@@ -203,8 +204,15 @@ struct GroupSummaryView: View {
                     topicCard(topic)
                 }
             }
-            HStack {
+            HStack(spacing: 8) {
                 Spacer()
+                Button {
+                    shareText = TextPayload(text: PromptBuilder.cleanedOutput(s.text))
+                } label: {
+                    Label("分享", systemImage: "square.and.arrow.up")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
                 Button {
                     UIPasteboard.general.string = PromptBuilder.cleanedOutput(s.text)
                 } label: {
@@ -212,6 +220,9 @@ struct GroupSummaryView: View {
                         .font(.caption)
                 }
                 .buttonStyle(.bordered)
+            }
+            .sheet(item: $shareText) { p in
+                ActivityShareView(items: [p.text])
             }
         } else if !messages.isEmpty {
             Button {
@@ -366,4 +377,9 @@ struct GroupSummaryView: View {
                 chatId: chatId, chatTitle: chatTitle, dayKey: dayKey, slot: slot)
         }
     }
+}
+
+private struct TextPayload: Identifiable {
+    let text: String
+    var id: String { text }
 }

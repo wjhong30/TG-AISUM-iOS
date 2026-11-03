@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import BackgroundTasks
 
 @main
@@ -13,9 +14,31 @@ struct TGAISUMApp: App {
         WindowGroup {
             RootView()
         }
-        .onChange(of: scenePhase) { _ in
+        .onChange(of: scenePhase) { phase in
             BackgroundRefresher.schedule()
+            if phase == .background {
+                BackgroundGuard.acquireIfNeeded()
+            }
         }
+    }
+}
+
+/// 切后台时若仍有总结在生成，申请后台运行时间让它跑完再挂起
+@MainActor
+enum BackgroundGuard {
+    private static var taskId: UIBackgroundTaskIdentifier = .invalid
+
+    static func acquireIfNeeded() {
+        guard !SummaryStore.shared.generating.isEmpty, taskId == .invalid else { return }
+        taskId = UIApplication.shared.beginBackgroundTask(withName: "summary-generate") {
+            Task { @MainActor in release() }
+        }
+    }
+
+    static func release() {
+        guard taskId != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(taskId)
+        taskId = .invalid
     }
 }
 

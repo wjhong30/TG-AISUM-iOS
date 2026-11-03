@@ -291,6 +291,50 @@ final class TDService: ObservableObject {
 
     private var imagePaths: [Int: String] = [:]
 
+    struct DownloadedFile {
+        let url: URL
+        let name: String
+        let size: Int64
+        let mime: String
+    }
+
+    /// 下载某条消息里的文件（文档），复制到缓存目录，返回可预览/分享的本地 URL
+    func downloadDocument(chatId: Int64, messageId: Int64) async -> DownloadedFile? {
+        guard let client else { return nil }
+        guard let msg = try? await client.getMessage(chatId: chatId, messageId: messageId) else { return nil }
+        guard case .messageDocument(let d) = msg.content else { return nil }
+        let fid = d.document.document.id
+        if let cached = downloadedFiles[fid] { return cached }
+        do {
+            let file = try await client.downloadFile(
+                fileId: fid, limit: 0, offset: 0, priority: 16, synchronous: true)
+            guard file.local.isDownloadingCompleted, !file.local.path.isEmpty else { return nil }
+            let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("shared", isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let rawName = d.document.fileName.isEmpty ? "file-\(fid)" : d.document.fileName
+            var dst = dir.appendingPathComponent(rawName)
+            if FileManager.default.fileExists(atPath: dst.path) {
+                let ext = dst.pathExtension
+                let base = dst.deletingPathExtension().lastPathComponent
+                dst = dir.appendingPathComponent(ext.isEmpty ? "\(base)-\(fid)" : "\(base)-\(fid).\(ext)")
+            }
+            try? FileManager.default.copyItem(at: URL(fileURLWithPath: file.local.path), to: dst)
+            guard FileManager.default.fileExists(atPath: dst.path) else { return nil }
+            let result = DownloadedFile(
+                url: dst,
+                name: rawName,
+                size: d.document.document.size > 0 ? d.document.document.size : d.document.document.expectedSize,
+                mime: d.document.mimeType)
+            downloadedFiles[fid] = result
+            return result
+        } catch {
+            return nil
+        }
+    }
+
+    private var downloadedFiles: [Int: DownloadedFile] = [:]
+
     private func displayName(sender: MessageSender?) async -> String {
         switch sender {
         case .messageSenderUser(let u):
