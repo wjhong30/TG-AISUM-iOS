@@ -78,6 +78,17 @@ final class SummaryStore: ObservableObject {
     }
 }
 
+/// 自动重新总结的节流策略：省 token
+enum SummaryPolicy {
+    /// 已有总结且新增消息超过该数量才自动重算；手动「重新总结」不受限
+    static let autoRegenThreshold = 100
+
+    static func shouldAutoRegenerate(summary: CachedSummary?, currentCount: Int) -> Bool {
+        guard let s = summary else { return currentCount > 0 }
+        return currentCount - s.msgCount > autoRegenThreshold
+    }
+}
+
 @MainActor
 enum SummaryService {
     static func generate(chatId: Int64, chatTitle: String, dayKey: String, slot: SlotRange) async {

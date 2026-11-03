@@ -27,12 +27,18 @@ Telegram 群聊 AI 总结的 iPhone 客户端。定位与 [TG-AISUM Desktop](htt
 
 ## 一、功能
 
-**总结页**
-- 时间维度：凌晨 / 上午 / 下午 / 晚上 / 全天 / 自定义区间。分段控件只显示名称，不显示时间数字；
-  时段边界（0–6 / 6–12 / 12–18 / 18–24）只出现在送给模型的提示词里。
-- 日期可选任意一天，时区固定 Asia/Shanghai。
-- 每个群一张卡片：消息数、生成中、错误原因、正文。结果按 `群 × 日期 × 时段` 缓存，重进不重算。
-- 区间内出现新消息时提示「有 N 条新消息，建议重新总结」，可强制重新生成。
+**消息页（首页，QQ 式聊天列表）**
+- 按最近消息排序的会话列表：头像、最后一条消息预览、时间、今日消息数与「N 条新」角标，正在生成时显示「总结中」。
+- 点进任意群直达该群的 AI 总结页；顶部按钮一键「同步 + 按需总结」所选群。
+
+**总结页（元宝式卡片）**
+- 顶部卡片：共 N 条消息 / 正在总结 / 已总结 N 条消息；有新消息时提示「有 N 条新消息，满 100 条才自动重算」。
+- 日期 + 时段（凌晨 / 上午 / 下午 / 晚上 / 全天 / 自定义区间，时区固定 Asia/Shanghai）。
+- 正文按话题卡片渲染：话题标题 + 时间区间 + 参与成员胶囊 + 要点列表；总览单独成卡；「复制全文」一键复制。
+- **引用编号**：要点后附 `(n)` 编号圆片，编号来自提示词阶段对真实消息的编号（提示词禁止编造），
+  点击进入「N 条群聊记录」气泡页，自动滚动并高亮被引用的消息；话题的时间区间也可整段查看记录。
+- 省 token：打开页面时只有新消息比上次总结多出 100 条以上才自动重新生成，否则沿用缓存；手动重算不受限制。
+- 结果按 `群 × 日期 × 时段` 缓存，重进不重算；解析失败自动回退纯文本渲染。
 - 输出去掉 `#` / `**` / 反引号 / 代码块围栏等 markdown 记号，按段落重排（首行加粗、行距放宽、可选中复制）。
 
 **群组页**
@@ -137,7 +143,7 @@ TGAISUM/
               PromptBuilder.swift（默认模板 / 占位符填充 / 去 markdown）
               LLMClient.swift（OpenAI 兼容多节点降级）
               SummaryStore.swift（总结缓存与生成状态）
-  UI/         SetupView / MainView / GroupsView / SummaryView / SettingsView / RichTextView
+  UI/         SetupView / MainView / ChatListView / GroupSummaryView / ChatLogView / GroupsView / SettingsView / RichTextView
 vendor/
   TDLibKit/   TDLib 生成绑定（1965 个 .swift）
   TDLibShim/  C 声明 + modulemap
@@ -175,6 +181,7 @@ project.yml                xcodegen 配置（可选）
 
 | 版本 | tag | 要点 |
 |---|---|---|
+| 0.3.0 | [`v0.3.0`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.3.0) | QQ 式聊天列表 + 元宝式话题卡片总结页、引用编号直达原始群聊记录、>100 条才自动重算的省 token 策略 |
 | 0.2.0 | [`v0.2.0`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.2.0) | 四时段 + 自定义、我的总结清单、可编辑提示词模板、输出去 markdown 并排版 |
 | 0.1.2 | [`v0.1.2`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.1.2) | 修复授权事件解码，登录端到端可用 |
 | 0.1.1 | [`v0.1.1`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.1.1) | 登录事件日志、连接超时诊断、SOCKS5/HTTP 代理 |

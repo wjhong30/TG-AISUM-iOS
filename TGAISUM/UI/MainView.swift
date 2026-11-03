@@ -3,8 +3,8 @@ import SwiftUI
 struct MainView: View {
     var body: some View {
         TabView {
-            SummaryView()
-                .tabItem { Label("总结", systemImage: "sparkles") }
+            ChatListView()
+                .tabItem { Label("消息", systemImage: "bubble.left.and.bubble.right") }
             GroupsView()
                 .tabItem { Label("群组", systemImage: "person.3") }
             SettingsView()

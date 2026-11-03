@@ -33,6 +33,32 @@ struct SlotRange: Equatable {
     }
 }
 
+/// 总结页时段选择（UI 用）
+enum SlotMode: String, CaseIterable, Identifiable {
+    case dawn = "凌晨"
+    case morning = "上午"
+    case afternoon = "下午"
+    case evening = "晚上"
+    case full = "全天"
+    case custom = "自定义"
+    var id: String { rawValue }
+
+    func range(customStart: Date, customEnd: Date) -> SlotRange {
+        switch self {
+        case .dawn: return .dawn
+        case .morning: return .morning
+        case .afternoon: return .afternoon
+        case .evening: return .evening
+        case .full: return .full
+        case .custom:
+            return .custom(
+                startMinute: DayUtil.minuteOfDay(customStart),
+                endMinute: min(DayUtil.minuteOfDay(customEnd), 24 * 60)
+            )
+        }
+    }
+}
+
 enum DayUtil {
     static let tz = TimeZone(identifier: "Asia/Shanghai")!
 
@@ -72,8 +98,20 @@ enum DayUtil {
         return formatter.string(from: date)
     }
 
+    static func clockString(_ epochSeconds: Int) -> String {
+        let date = Date(timeIntervalSince1970: TimeInterval(epochSeconds))
+        let formatter = DateFormatter()
+        formatter.timeZone = tz
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+
     static func minuteOfDay(_ date: Date) -> Int {
         let c = calendar.dateComponents([.hour, .minute], from: date)
         return (c.hour ?? 0) * 60 + (c.minute ?? 0)
+    }
+
+    static func calendarDateComponents(_ date: Date) -> DateComponents {
+        calendar.dateComponents([.month, .day], from: date)
     }
 }

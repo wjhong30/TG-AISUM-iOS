@@ -1,35 +1,44 @@
 import Foundation
 
 enum PromptBuilder {
+    /// 取某天某时段的文本消息；顺序稳定（时间→id），保证提示词里的编号与回溯一致
     static func filter(messages: [ArchiveMessage], dayKey: String, slot: SlotRange) -> [ArchiveMessage] {
         let start = DayUtil.dayStart(ofDay: dayKey)
         let startEpoch = DayUtil.epoch(start) + slot.startMinute * 60
         let endEpoch = DayUtil.epoch(start) + slot.endMinute * 60
-        return messages.filter { $0.date >= startEpoch && $0.date < endEpoch && !$0.text.isEmpty }
+        return messages
+            .filter { $0.date >= startEpoch && $0.date < endEpoch && !$0.text.isEmpty }
+            .sorted { ($0.date, $0.id) < ($1.date, $1.id) }
     }
 
-    /// 内置默认模板：纯文本排版、无 Markdown 记号
+    /// 引用编号 → 原消息（1 基，与 transcript 编号一致）
+    static func message(at index: Int, in messages: [ArchiveMessage]) -> ArchiveMessage? {
+        guard index >= 1, index <= messages.count else { return nil }
+        return messages[index - 1]
+    }
+
+    /// 内置默认模板：话题化结构 + 消息编号引用，供元宝式卡片解析
     static let defaultTemplate = """
-    你是一个 Telegram 群聊总结助手。请根据聊天记录输出一份美观、易读的中文总结。
+    你是 Telegram 群聊总结助手。下面给你的聊天记录每条消息都带编号（#n），总结时必须用编号引用。
 
-    排版硬性要求（必须遵守）：
-    - 只输出纯文本。禁止使用任何 Markdown 记号：不要井号#、不要星号*、不要反引号`
-    - 小节标题单独占一行，以「■ 」开头，例如：■ 核心话题
-    - 条目以「· 」开头；引用具体聊天记录时，另起一行以「｜」开头并标注时间
-    - 段落之间空一行；特别重要的结论用【】标注
-    - 总结必须基于聊天记录，不得编造；消息越多写得越细，不设长度上限
-    - 不要输出模板说明、免责声明，只输出最终成品
+    输出格式（纯文本，严格遵守；禁止 Markdown 记号：不要 #、*、反引号）：
 
-    总结结构（小节标题固定）：
-    ■ 核心话题
-    每个话题一段：起因 → 发展 → 结论
-    ■ 重要事件
-    按时间顺序列出关键事件
-    ■ 活跃成员与观点
-    谁是核心发言人，主要分歧是什么
-    ■ 有用信息
-    涉及的工具、链接、资源、技术结论
-    ■ 待解决问题
+    ■ 总览
+    一句话概括这段聊天（30 字内），句末给出最主要的引用，如 (3)(12)
+
+    ■ 话题标题（HH:MM–HH:MM）
+    · 成员：@甲、@乙
+    · 要点：这个话题聊了什么、得出什么结论 (n)(m)
+    · 要点：另一条要点 (k)
+
+    话题写 2~6 个，按时间顺序；没有实质讨论就不要硬凑。
+
+    硬性规则：
+    - 每个话题的「成员」行列出主要发言人（2~5 人）；时间区间取该话题首末消息的时间
+    - 要点里凡涉及具体发言、结论、链接、文件，句末加引用标记 (n)，n 对应消息编号 #n；可多个，如 (3)(7)
+    - 编号必须真实存在，禁止编造；引用要精准，指向支持该结论的那条消息
+    - 要点写结论和信息，不要复述寒暄；消息越多写得越细，不设长度上限
+    - 只输出成品，不要模板说明、免责声明
 
     其他风格要求：{style}
 
@@ -42,19 +51,19 @@ enum PromptBuilder {
     活跃成员 TOP15：
     {senders}
 
-    聊天记录（按时间顺序）：
+    聊天记录（按时间顺序，每行开头是编号）：
     {transcript}
     """
 
     static func build(groupName: String, dayKey: String, slot: SlotRange, messages: [ArchiveMessage]) -> (system: String, user: String) {
         var lines: [String] = []
         var senderCounts: [String: Int] = [:]
-        for m in messages {
-            let ts = DayUtil.timeString(m.date)
+        for (idx, m) in messages.enumerated() {
+            let ts = DayUtil.clockString(m.date)
             let sender = m.sender.hasPrefix("@") ? m.sender : "@" + m.sender
             let text = m.text.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
             if text.isEmpty { continue }
-            lines.append("[\(ts)] \(sender): \(text)")
+            lines.append("#\(idx + 1) [\(ts)] \(sender): \(text)")
             senderCounts[sender, default: 0] += 1
         }
         let transcript = lines.joined(separator: "\n")
@@ -86,7 +95,7 @@ enum PromptBuilder {
     static func cleanedOutput(_ raw: String) -> String {
         raw.components(separatedBy: "\n").map { line in
             var l = line
-            if let r = l.range(of: #"^\s*#{1,6}\s*"#, options: .regularExpression) {
+            if let r = l.range(of: #"^\s*#{1,6}\s+"#, options: .regularExpression) {
                 l = String(l[r.upperBound...])
             }
             l = l
@@ -97,5 +106,109 @@ enum PromptBuilder {
         }
         .filter { $0 != "```" && $0 != "```plaintext" }
         .joined(separator: "\n")
+    }
+
+    // MARK: - 话题解析（元宝式卡片）
+
+    struct SummaryTopic: Identifiable {
+        let id: Int
+        var title: String
+        var timeRange: String?
+        var members: [String]
+        var bullets: [String]
+        var citations: [Int]
+    }
+
+    struct ParsedSummary {
+        var overview: SummaryTopic?
+        var topics: [SummaryTopic]
+        var plain: String
+    }
+
+    /// 把模型输出解析成「总览 + 话题」结构；解析不出话题时回退纯文本渲染
+    static func parseSummary(_ raw: String) -> ParsedSummary {
+        let cleaned = cleanedOutput(raw)
+        var blocks: [(title: String, lines: [String])] = []
+        for line in cleaned.components(separatedBy: "\n") {
+            let t = line.trimmingCharacters(in: .whitespaces)
+            if t.isEmpty { continue }
+            if t.hasPrefix("■") {
+                blocks.append((String(t.dropFirst()).trimmingCharacters(in: .whitespaces), []))
+            } else if blocks.isEmpty {
+                blocks.append(("", [t]))
+            } else {
+                blocks[blocks.count - 1].lines.append(t)
+            }
+        }
+
+        var overview: SummaryTopic?
+        var topics: [SummaryTopic] = []
+        for (i, block) in blocks.enumerated() {
+            let isOverview = i == 0 && (block.title.contains("总览") || block.title.isEmpty) && blocks.count > 1
+            let topic = makeTopic(id: i, title: block.title, lines: block.lines)
+            if isOverview && topics.isEmpty && overview == nil {
+                overview = topic
+            } else {
+                topics.append(topic)
+            }
+        }
+        // 模型完全没按「■ 话题」输出时，回退纯文本渲染
+        if overview == nil && topics.count == 1 && topics[0].title.isEmpty && topics[0].timeRange == nil {
+            return ParsedSummary(overview: nil, topics: [], plain: cleaned)
+        }
+        return ParsedSummary(overview: overview, topics: topics, plain: cleaned)
+    }
+
+    private static func makeTopic(id: Int, title: String, lines: [String]) -> SummaryTopic {
+        var displayTitle = title
+        var timeRange: String?
+
+        // 从标题里抠时间区间：15:20–16:08 / 15:20 - 16:08
+        if let r = displayTitle.range(of: #"\d{1,2}:\d{2}\s*[–—~\-至到]\s*\d{1,2}:\d{2}"#, options: .regularExpression) {
+            timeRange = String(displayTitle[r])
+            displayTitle = (String(displayTitle[..<r.lowerBound]) + String(displayTitle[r.upperBound...]))
+                .trimmingCharacters(in: CharacterSet(charactersIn: " （）()·-–—~　"))
+        }
+
+        var members: [String] = []
+        var bullets: [String] = []
+        for line in lines {
+            var t = line
+            let isBullet = t.hasPrefix("·") || t.hasPrefix("-") || t.hasPrefix("•")
+            if isBullet { t = String(t.dropFirst()).trimmingCharacters(in: .whitespaces) }
+            if let r = t.range(of: #"^(成员|参与成员|发言人)\s*[:：]\s*"#, options: .regularExpression) {
+                let body = String(t[r.upperBound...])
+                members.append(contentsOf: body
+                    .split(whereSeparator: { "、,， ".contains($0) })
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .filter { !$0.isEmpty })
+            } else if isBullet {
+                bullets.append(t)
+            } else if !bullets.isEmpty {
+                bullets[bullets.count - 1] += " " + t
+            } else if displayTitle.isEmpty {
+                displayTitle = t
+            } else {
+                bullets.append(t)
+            }
+        }
+
+        let allText = (bullets + [displayTitle]).joined(separator: "\n")
+        let citations = parseCitations(allText)
+        return SummaryTopic(id: id, title: displayTitle, timeRange: timeRange,
+                            members: members, bullets: bullets, citations: citations)
+    }
+
+    /// 从文本里抽引用编号：(3) / （12），支持 (3)(7) 连写；越界由调用方按消息数过滤
+    static func parseCitations(_ text: String) -> [Int] {
+        var result: [Int] = []
+        guard let regex = try? NSRegularExpression(pattern: "[（(](\\d{1,4})[)）]") else { return [] }
+        let ns = text as NSString
+        for m in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            if let n = Int(ns.substring(with: m.range(at: 1))), !result.contains(n) {
+                result.append(n)
+            }
+        }
+        return result
     }
 }
