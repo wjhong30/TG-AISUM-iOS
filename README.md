@@ -182,6 +182,7 @@ project.yml                xcodegen 配置（可选）
 
 | 版本 | tag | 要点 |
 |---|---|---|
+| 0.4.1 | [`v0.4.1`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.4.1) | 分节解析兼容中文序号（一、/1、）分节，不退化为纯文本 |
 | 0.4.0 | [`v0.4.0`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.4.0) | 总结内容回归桌面版六板块深度报告（消息统计/核心话题/时间线/成员观点/技术汇总/趋势/待解决），元宝卡片式渲染 |
 | 0.3.1 | [`v0.3.1`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.3.1) | 修复话题标题占位符照抄；行内引用编号只留圆片；话题时间区间可点击查看该段记录 |
 | 0.3.0 | [`v0.3.0`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.3.0) | QQ 式聊天列表 + 元宝式话题卡片总结页、引用编号直达原始群聊记录、>100 条才自动重算的省 token 策略 |

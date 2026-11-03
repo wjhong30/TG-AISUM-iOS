@@ -143,8 +143,8 @@ enum PromptBuilder {
         for line in cleaned.components(separatedBy: "\n") {
             let t = line.trimmingCharacters(in: .whitespaces)
             if t.isEmpty { continue }
-            if t.hasPrefix("■") {
-                blocks.append((cleanSectionTitle(String(t.dropFirst())), []))
+            if isSectionHeader(t) {
+                blocks.append((cleanSectionTitle(t), []))
             } else if blocks.isEmpty {
                 blocks.append(("", [t]))
             } else {
@@ -170,9 +170,22 @@ enum PromptBuilder {
         return ParsedSummary(stats: stats, sections: sections, plain: cleaned)
     }
 
-    /// 剥掉标题前的序号（"一、" "1." 之类）
+    /// 分节头识别：「■ 标题」或「一、标题」「1、标题」式中文序号
+    private static func isSectionHeader(_ line: String) -> Bool {
+        if line.hasPrefix("■") { return true }
+        guard line.range(of: #"^[（(]?(\d{1,2}|[一二三四五六七八九十]{1,3})[、.．)）]\s*\S"#, options: .regularExpression) != nil else {
+            return false
+        }
+        // 序号式标题通常较短且不带引用编号
+        return line.count <= 30 && line.range(of: #"[（(]\d{1,4}[)）]"#, options: .regularExpression) == nil
+    }
+
+    /// 剥掉标题前的「■」与序号（"一、" "1." 之类）
     private static func cleanSectionTitle(_ raw: String) -> String {
         var t = raw.trimmingCharacters(in: .whitespaces)
+        while t.hasPrefix("■") {
+            t = String(t.dropFirst()).trimmingCharacters(in: .whitespaces)
+        }
         while let r = t.range(of: #"^\s*(\d{1,2}|[一二三四五六七八九十]+)[.、．)）]\s*"#, options: .regularExpression) {
             t = String(t[r.upperBound...]).trimmingCharacters(in: .whitespaces)
         }
@@ -185,6 +198,10 @@ enum PromptBuilder {
             var t = line
             let isBullet = t.hasPrefix("·") || t.hasPrefix("-") || t.hasPrefix("•")
             if isBullet { t = String(t.dropFirst()).trimmingCharacters(in: .whitespaces) }
+            // 剥掉条目自身的序号前缀（"1. " "（2）" 之类）
+            if let r = t.range(of: #"^\s*[（(]?(\d{1,2}|[一二三四五六七八九十]{1,3})[）)、.．]\s*"#, options: .regularExpression) {
+                t = String(t[r.upperBound...]).trimmingCharacters(in: .whitespaces)
+            }
             if let r = t.range(of: #"^(要点|内容|话题|事件|问题)\s*[:：]\s*"#, options: .regularExpression) {
                 t = String(t[r.upperBound...])
             }
