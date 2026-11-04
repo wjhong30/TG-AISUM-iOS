@@ -9,8 +9,12 @@ struct MentionText: View {
     var body: some View {
         Text(attributed)
             .lineSpacing(3)
-            .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)
+            // 显式接管链接点按：保证直接跳 Safari，避免默认行为被手势拦截
+            .environment(\.openURL, OpenURLAction { url in
+                UIApplication.shared.open(url, options: [:], completionHandler: nil)
+                return .handled
+            })
     }
 
     /// @昵称 与 URL 一起按出现顺序切分渲染；分段各自建 AttributedString，避免跨段索引换算
@@ -39,11 +43,9 @@ struct MentionText: View {
         a.font = font
         a.foregroundColor = color
         if isLink {
-            if chunk.hasPrefix("http") {
+            if chunk.hasPrefix("http"), let url = URL(string: chunk) {
+                a.link = url
                 a.underlineStyle = .single
-                if let url = URL(string: chunk) {
-                    a.link = url
-                }
             }
             a.font = font.weight(.semibold)
             a.foregroundColor = Color.accentColor

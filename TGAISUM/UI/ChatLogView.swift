@@ -77,10 +77,15 @@ struct ChatLogView: View {
                 }
                 if m.isImage {
                     ImageBubble(chatId: target.chatId, messageId: m.id) { fullscreenImage = $0 }
-                } else if m.isVideo {
-                    VideoBubble(chatId: target.chatId, messageId: m.id, archivedName: m.archivedFileName)
+                } else if m.isVideo || (m.isFile && m.isMediaFile) {
+                    MediaBubble(chatId: target.chatId, messageId: m.id,
+                                archivedName: m.archivedFileName, icon: "video.fill")
+                } else if m.isAudio {
+                    MediaBubble(chatId: target.chatId, messageId: m.id,
+                                archivedName: m.archivedFileName, icon: "speaker.wave.2.fill")
                 } else if m.isFile {
-                    FileBubble(chatId: target.chatId, messageId: m.id, archivedName: m.archivedFileName)
+                    MediaBubble(chatId: target.chatId, messageId: m.id,
+                                archivedName: m.archivedFileName, icon: "doc.fill")
                 } else {
                     MentionText(text: m.text, font: .subheadline)
                         .padding(.horizontal, 11)
@@ -89,7 +94,6 @@ struct ChatLogView: View {
                             (isHighlight ? Color.accentColor.opacity(0.16) : Color(uiColor: .secondarySystemGroupedBackground)),
                             in: RoundedRectangle(cornerRadius: 12)
                         )
-                        .textSelection(.enabled)
                 }
             }
             Spacer(minLength: 0)
@@ -98,14 +102,29 @@ struct ChatLogView: View {
 }
 
 extension ArchiveMessage {
+    /// 视频/音频媒体格式：文档形式发送的这类文件也按媒体气泡处理
+    static let mediaExtensions: Set<String> = [
+        "mp4", "m4v", "mov", "avi", "mkv", "webm", "3gp",
+        "mp3", "m4a", "wav", "aac", "flac", "ogg", "opus", "wma", "amr",
+    ]
+
     var isImage: Bool { text == "[图片]" }
     var isVideo: Bool { text.hasPrefix("[视频]") }
+    var isAudio: Bool { text.hasPrefix("[音频]") }
     var isFile: Bool { text.hasPrefix("[文件]") }
     /// 归档文本里带的原始文件名（v0.5.4 起才带；旧数据为空，点按下载后仍能拿到真名）
     var archivedFileName: String {
-        let prefix = isVideo ? "[视频]" : "[文件]"
-        return String(text.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+        for prefix in ["[视频]", "[文件]", "[音频]"] where text.hasPrefix(prefix) {
+            return String(text.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+        }
+        return ""
     }
+    var fileExtension: String {
+        let name = archivedFileName
+        guard let dot = name.lastIndex(of: "."), name.distance(from: dot, to: name.endIndex) > 1 else { return "" }
+        return String(name[name.index(after: dot)...]).lowercased()
+    }
+    var isMediaFile: Bool { Self.mediaExtensions.contains(fileExtension) }
 }
 
 /// 图片气泡：懒加载下载，加载完成显示缩略图，点击全屏
@@ -191,11 +210,13 @@ private struct ImageViewer: View {
     }
 }
 
-/// 文件气泡：点按下载后直接进 Quick Look 预览（预览自带分享，可保存到「文件」等）
-private struct FileBubble: View {
+/// 媒体气泡（视频/音频/文件统一）：点按下载后直接进 Quick Look 预览窗口
+/// （预览自带播放与分享，可保存到相册或「文件」），完成后可重复点开
+private struct MediaBubble: View {
     let chatId: Int64
     let messageId: Int64
     let archivedName: String
+    let icon: String
 
     @State private var file: TDService.DownloadedFile?
     @State private var loading = false
@@ -203,7 +224,7 @@ private struct FileBubble: View {
     @State private var previewItem: URLPayload?
 
     private var displayName: String {
-        file?.name ?? (archivedName.isEmpty ? "文件" : archivedName)
+        file?.name ?? (archivedName.isEmpty ? (icon == "video.fill" ? "视频" : icon == "speaker.wave.2.fill" ? "音频" : "文件") : archivedName)
     }
 
     var body: some View {
@@ -215,96 +236,11 @@ private struct FileBubble: View {
             }
         } label: {
             HStack(spacing: 10) {
-                Image(systemName: "doc.fill")
+                Image(systemName: icon)
                     .font(.title3)
                     .foregroundStyle(Color.accentColor)
                 VStack(alignment: .leading, spacing: 2) {
                     // 完整展示文件名，不截断
-                    Text(displayName)
-                        .font(.subheadline.weight(.medium))
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(subtitle)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 4)
-                if loading {
-                    ProgressView()
-                } else {
-                    Image(systemName: file == nil ? "arrow.down.circle" : "doc.text.viewfinder")
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(.horizontal, 11)
-            .padding(.vertical, 9)
-            .frame(maxWidth: 250, alignment: .leading)
-            .background(Color(uiColor: .secondarySystemGroupedBackground),
-                        in: RoundedRectangle(cornerRadius: 12))
-        }
-        .buttonStyle(.plain)
-        .sheet(item: $previewItem) { p in
-            QuickLookView(url: p.url)
-                .ignoresSafeArea()
-        }
-    }
-
-    private var subtitle: String {
-        if loading { return "下载中…" }
-        if let f = file {
-            let fmt = ByteCountFormatter()
-            fmt.countStyle = .file
-            return fmt.string(fromByteCount: f.size)
-        }
-        if failed { return "下载失败，点按重试" }
-        return "点按下载查看"
-    }
-
-    private func load() {
-        guard !loading else { return }
-        loading = true
-        failed = false
-        Task {
-            let f = await TDService.shared.downloadDocument(chatId: chatId, messageId: messageId)
-            loading = false
-            if let f {
-                file = f
-                previewItem = URLPayload(url: f.url)
-            } else {
-                failed = true
-            }
-        }
-    }
-}
-
-/// 视频气泡：点按下载后进 Quick Look 预览窗口（Telegram 式，自带播放/分享/关闭），
-/// 分享面板可保存到相册或「文件」
-private struct VideoBubble: View {
-    let chatId: Int64
-    let messageId: Int64
-    let archivedName: String
-
-    @State private var file: TDService.DownloadedFile?
-    @State private var loading = false
-    @State private var failed = false
-    @State private var previewItem: URLPayload?
-
-    private var displayName: String {
-        file?.name ?? (archivedName.isEmpty ? "视频" : archivedName)
-    }
-
-    var body: some View {
-        Button {
-            if file != nil {
-                previewItem = URLPayload(url: file!.url)
-            } else {
-                load()
-            }
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "video.fill")
-                    .font(.title3)
-                    .foregroundStyle(Color.accentColor)
-                VStack(alignment: .leading, spacing: 2) {
                     Text(displayName)
                         .font(.subheadline.weight(.medium))
                         .fixedSize(horizontal: false, vertical: true)
@@ -329,7 +265,6 @@ private struct VideoBubble: View {
         .buttonStyle(.plain)
         .sheet(item: $previewItem) { p in
             QuickLookView(url: p.url)
-                .ignoresSafeArea()
         }
     }
 
@@ -349,7 +284,7 @@ private struct VideoBubble: View {
         loading = true
         failed = false
         Task {
-            let f = await TDService.shared.downloadVideo(chatId: chatId, messageId: messageId)
+            let f = await TDService.shared.downloadMedia(chatId: chatId, messageId: messageId)
             loading = false
             if let f {
                 file = f
