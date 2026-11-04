@@ -1,5 +1,5 @@
 import SwiftUI
-import QuickLook
+import AVKit
 
 /// 引用跳转目标：群 + 天 + 时段 + 要高亮的消息
 struct ChatLogTarget: Hashable {
@@ -191,7 +191,7 @@ private struct ImageViewer: View {
     }
 }
 
-/// 文件气泡：点按下载后直接进 Quick Look 预览（预览自带分享，可保存到「文件」等）
+/// 文件气泡：点按下载，下载完成后直接弹系统分享面板（可保存到「文件」、隔空投送等）
 private struct FileBubble: View {
     let chatId: Int64
     let messageId: Int64
@@ -200,7 +200,7 @@ private struct FileBubble: View {
     @State private var file: TDService.DownloadedFile?
     @State private var loading = false
     @State private var failed = false
-    @State private var previewItem: URLPayload?
+    @State private var showShare = false
 
     private var displayName: String {
         file?.name ?? (archivedName.isEmpty ? "文件" : archivedName)
@@ -209,7 +209,7 @@ private struct FileBubble: View {
     var body: some View {
         Button {
             if file != nil {
-                previewItem = URLPayload(url: file!.url)
+                showShare = true
             } else {
                 load()
             }
@@ -231,7 +231,7 @@ private struct FileBubble: View {
                 if loading {
                     ProgressView()
                 } else {
-                    Image(systemName: file == nil ? "arrow.down.circle" : "doc.text.viewfinder")
+                    Image(systemName: file == nil ? "arrow.down.circle" : "square.and.arrow.up")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -242,8 +242,10 @@ private struct FileBubble: View {
                         in: RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
-        .sheet(item: $previewItem) { p in
-            QuickLookView(url: p.url)
+        .sheet(isPresented: $showShare) {
+            if let file {
+                ActivityShareView(items: [file.url])
+            }
         }
     }
 
@@ -255,7 +257,7 @@ private struct FileBubble: View {
             return fmt.string(fromByteCount: f.size)
         }
         if failed { return "下载失败，点按重试" }
-        return "点按下载查看"
+        return "点按下载分享"
     }
 
     private func load() {
@@ -267,7 +269,7 @@ private struct FileBubble: View {
             loading = false
             if let f {
                 file = f
-                previewItem = URLPayload(url: f.url)
+                showShare = true
             } else {
                 failed = true
             }
@@ -275,8 +277,8 @@ private struct FileBubble: View {
     }
 }
 
-/// 视频气泡：点按下载后进 Quick Look 预览窗口（Telegram 式，自带播放/分享/关闭），
-/// 分享面板可保存到相册或「文件」
+/// 视频气泡：点按下载后进 Telegram 式全屏播放器（进度条/暂停/±10秒），
+/// 播放器内可保存到相册或「文件」
 private struct VideoBubble: View {
     let chatId: Int64
     let messageId: Int64
@@ -285,7 +287,7 @@ private struct VideoBubble: View {
     @State private var file: TDService.DownloadedFile?
     @State private var loading = false
     @State private var failed = false
-    @State private var previewItem: URLPayload?
+    @State private var playingURL: URL?
 
     private var displayName: String {
         file?.name ?? (archivedName.isEmpty ? "视频" : archivedName)
@@ -294,7 +296,7 @@ private struct VideoBubble: View {
     var body: some View {
         Button {
             if file != nil {
-                previewItem = URLPayload(url: file!.url)
+                playingURL = file!.url
             } else {
                 load()
             }
@@ -315,7 +317,7 @@ private struct VideoBubble: View {
                 if loading {
                     ProgressView()
                 } else {
-                    Image(systemName: file == nil ? "arrow.down.circle" : "eye.circle.fill")
+                    Image(systemName: file == nil ? "arrow.down.circle" : "play.circle.fill")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -326,8 +328,10 @@ private struct VideoBubble: View {
                         in: RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
-        .sheet(item: $previewItem) { p in
-            QuickLookView(url: p.url)
+        .fullScreenCover(item: Binding(
+            get: { playingURL.map { URLPayload(url: $0) } },
+            set: { playingURL = $0?.url })) { p in
+            VideoPlayerScreen(url: p.url) { playingURL = nil }
         }
     }
 
@@ -339,7 +343,7 @@ private struct VideoBubble: View {
             return fmt.string(fromByteCount: f.size)
         }
         if failed { return "下载失败，点按重试" }
-        return "点按下载查看"
+        return "点按下载观看"
     }
 
     private func load() {
@@ -351,12 +355,83 @@ private struct VideoBubble: View {
             loading = false
             if let f {
                 file = f
-                previewItem = URLPayload(url: f.url)
+                playingURL = f.url
             } else {
                 failed = true
             }
         }
     }
+}
+
+/// Telegram 式全屏视频播放器：AVKit 原生控制（进度条/播放暂停/±10秒/画中画），
+/// 关闭与分享按钮固定在安全区内，不与状态栏重叠
+private struct VideoPlayerScreen: View {
+    let url: URL
+    let onClose: () -> Void
+
+    @State private var player: AVPlayer?
+    @State private var showShare = false
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            Color.black.ignoresSafeArea()
+            if let player {
+                AVPlayerView(player: player)
+                    .ignoresSafeArea()
+            } else {
+                Color.black
+                    .ignoresSafeArea()
+                    .overlay(ProgressView().tint(.white))
+            }
+            HStack {
+                Button {
+                    player?.pause()
+                    onClose()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(11)
+                        .background(.black.opacity(0.45), in: Circle())
+                }
+                Spacer()
+                Button {
+                    showShare = true
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(11)
+                        .background(.black.opacity(0.45), in: Circle())
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+        }
+        .onAppear {
+            let p = AVPlayer(url: url)
+            p.play()
+            player = p
+        }
+        .onDisappear { player?.pause() }
+        .sheet(isPresented: $showShare) {
+            ActivityShareView(items: [url])
+        }
+    }
+}
+
+/// AVKit 播放器封装：自带完整播放控制
+private struct AVPlayerView: UIViewControllerRepresentable {
+    let player: AVPlayer
+
+    func makeUIViewController(context: Context) -> AVPlayerViewController {
+        let vc = AVPlayerViewController()
+        vc.player = player
+        vc.showsPlaybackControls = true
+        return vc
+    }
+
+    func updateUIViewController(_ vc: AVPlayerViewController, context: Context) {}
 }
 
 struct URLPayload: Identifiable {
@@ -373,30 +448,4 @@ struct ActivityShareView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
-}
-
-/// Quick Look 预览：PDF/图片/文本/Office 等系统可直接预览的格式
-struct QuickLookView: UIViewControllerRepresentable {
-    let url: URL
-
-    func makeCoordinator() -> Coordinator { Coordinator(url: url) }
-
-    func makeUIViewController(context: Context) -> QLPreviewController {
-        let c = QLPreviewController()
-        c.dataSource = context.coordinator
-        return c
-    }
-
-    func updateUIViewController(_ c: QLPreviewController, context: Context) {
-        c.reloadData()
-    }
-
-    final class Coordinator: NSObject, QLPreviewControllerDataSource {
-        let url: URL
-        init(url: URL) { self.url = url }
-        func numberOfPreviewItems(in controller: QLPreviewController) -> Int { 1 }
-        func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
-            url as QLPreviewItem
-        }
-    }
 }
