@@ -298,35 +298,29 @@ final class TDService: ObservableObject {
         let mime: String
     }
 
-    /// 下载某条消息里的媒体（视频/音频/文件，按消息实际类型分发），复制到缓存目录，
-    /// 返回可预览/分享的本地 URL。文档形式发送的 mp4/mov/mp3 等也走这里。
-    func downloadMedia(chatId: Int64, messageId: Int64) async -> DownloadedFile? {
+    /// 下载某条消息里的文件（文档），复制到缓存目录，返回可预览/分享的本地 URL
+    func downloadDocument(chatId: Int64, messageId: Int64) async -> DownloadedFile? {
         guard let client else { return nil }
         guard let msg = try? await client.getMessage(chatId: chatId, messageId: messageId) else { return nil }
-        switch msg.content {
-        case .messageVideo(let v):
-            let vid = v.video
-            return await downloadAndStage(
-                client: client, fileId: vid.video.id,
-                name: vid.fileName.isEmpty ? "video-\(vid.video.id).mp4" : vid.fileName,
-                size: vid.video.size > 0 ? vid.video.size : vid.video.expectedSize,
-                mime: vid.mimeType.isEmpty ? "video/mp4" : vid.mimeType)
-        case .messageAudio(let a):
-            let au = a.audio
-            return await downloadAndStage(
-                client: client, fileId: au.audio.id,
-                name: au.fileName.isEmpty ? "audio-\(au.audio.id).mp3" : au.fileName,
-                size: au.audio.size > 0 ? au.audio.size : au.audio.expectedSize,
-                mime: au.mimeType.isEmpty ? "audio/mpeg" : au.mimeType)
-        case .messageDocument(let d):
-            let doc = d.document
-            return await downloadAndStage(
-                client: client, fileId: doc.document.id,
-                name: doc.fileName, size: doc.document.size > 0 ? doc.document.size : doc.document.expectedSize,
-                mime: doc.mimeType)
-        default:
-            return nil
-        }
+        guard case .messageDocument(let d) = msg.content else { return nil }
+        let doc = d.document
+        return await downloadAndStage(
+            client: client, fileId: doc.document.id,
+            name: doc.fileName, size: doc.document.size > 0 ? doc.document.size : doc.document.expectedSize,
+            mime: doc.mimeType)
+    }
+
+    /// 下载某条消息里的视频，返回可播放/分享的本地 URL
+    func downloadVideo(chatId: Int64, messageId: Int64) async -> DownloadedFile? {
+        guard let client else { return nil }
+        guard let msg = try? await client.getMessage(chatId: chatId, messageId: messageId) else { return nil }
+        guard case .messageVideo(let v) = msg.content else { return nil }
+        let vid = v.video
+        return await downloadAndStage(
+            client: client, fileId: vid.video.id,
+            name: vid.fileName.isEmpty ? "video-\(vid.video.id).mp4" : vid.fileName,
+            size: vid.video.size > 0 ? vid.video.size : vid.video.expectedSize,
+            mime: vid.mimeType.isEmpty ? "video/mp4" : vid.mimeType)
     }
 
     /// 下载 TDLib 文件并复制一份到缓存目录（按原始文件名），供预览/分享使用
