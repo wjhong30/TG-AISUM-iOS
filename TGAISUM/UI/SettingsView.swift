@@ -4,7 +4,6 @@ struct SettingsView: View {
     @ObservedObject var settings = AppSettings.shared
     @ObservedObject var td = TDService.shared
     @State private var showLogoutConfirm = false
-    @State private var showWipeConfirm = false
 
     var body: some View {
         NavigationStack {
@@ -99,8 +98,15 @@ struct SettingsView: View {
                 }
 
                 Section("数据") {
-                    Button("清空全部总结缓存", role: .destructive) {
-                        showWipeConfirm = true
+                    NavigationLink {
+                        StorageView()
+                    } label: {
+                        HStack {
+                            Text("存储空间")
+                            Spacer()
+                            Image(systemName: "internaldrive")
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
@@ -108,11 +114,6 @@ struct SettingsView: View {
             .confirmationDialog("退出登录会删除本机 Telegram 会话与消息归档？仅退出会话，归档保留。", isPresented: $showLogoutConfirm, titleVisibility: .visible) {
                 Button("确认退出登录", role: .destructive) {
                     Task { await td.logout() }
-                }
-            }
-            .confirmationDialog("将删除所有已生成的总结，聊天归档保留。", isPresented: $showWipeConfirm, titleVisibility: .visible) {
-                Button("确认清空", role: .destructive) {
-                    SummaryStore.shared.removeAll()
                 }
             }
         }

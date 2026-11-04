@@ -86,6 +86,12 @@ final class SyncService: ObservableObject {
         }
     }
 
+    /// 清空归档后调用：断点归零，下次同步重新回抓近 7 天
+    func resetCheckpoints() {
+        lastSync.removeAll()
+        UserDefaults.standard.removeObject(forKey: "lastSync")
+    }
+
     /// 同步指定群：首次抓近 7 天，此后增量（多回看 1 小时防边界遗漏）
     func syncAll(chatIds: [Int64]) async {
         guard !syncing else { return }
