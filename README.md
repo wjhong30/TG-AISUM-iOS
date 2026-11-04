@@ -182,7 +182,8 @@ project.yml                xcodegen 配置（可选）
 
 | 版本 | tag | 要点 |
 |---|---|---|
-| 0.5.7 | [`v0.5.7`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.5.7) | 视频下载后进 Quick Look 预览窗口（可存相册/文件）；链接下划线点按跳 Safari；文件名完整展示 |
+| 0.5.8 | [`v0.5.8`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.5.8) | 链接识别重做（系统 NSDataDetector，下划线点按跳 Safari）；视频全屏播放器与文件一键分享（0.5.7）延续 |
+| 0.5.7 | [`v0.5.7`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.5.7) | 视频全屏播放器（进度条/±10秒/画中画）；文件下载后直接弹分享面板 |
 | 0.5.6 | [`v0.5.6`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.5.6) | 存储空间管理：分类统计占用 + 全选/部分清理（图片媒体、文件副本、总结缓存、聊天归档） |
 | 0.5.5 | [`v0.5.5`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.5.5) | 话题「查看记录」只展示该话题时间区间的消息并高亮引用 |
 | 0.5.4 | [`v0.5.4`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.5.4) | @昵称 高亮、文件消息不下载即显示文件名、话题数不设上限+深度硬约束 |
