@@ -303,30 +303,47 @@ final class TDService: ObservableObject {
         guard let client else { return nil }
         guard let msg = try? await client.getMessage(chatId: chatId, messageId: messageId) else { return nil }
         guard case .messageDocument(let d) = msg.content else { return nil }
-        let fid = d.document.document.id
-        if let cached = downloadedFiles[fid] { return cached }
+        let doc = d.document
+        return await downloadAndStage(
+            client: client, fileId: doc.document.id,
+            name: doc.fileName, size: doc.document.size > 0 ? doc.document.size : doc.document.expectedSize,
+            mime: doc.mimeType)
+    }
+
+    /// 下载某条消息里的视频，返回可播放/分享的本地 URL
+    func downloadVideo(chatId: Int64, messageId: Int64) async -> DownloadedFile? {
+        guard let client else { return nil }
+        guard let msg = try? await client.getMessage(chatId: chatId, messageId: messageId) else { return nil }
+        guard case .messageVideo(let v) = msg.content else { return nil }
+        let vid = v.video
+        return await downloadAndStage(
+            client: client, fileId: vid.video.id,
+            name: vid.fileName.isEmpty ? "video-\(vid.video.id).mp4" : vid.fileName,
+            size: vid.video.size > 0 ? vid.video.size : vid.video.expectedSize,
+            mime: vid.mimeType.isEmpty ? "video/mp4" : vid.mimeType)
+    }
+
+    /// 下载 TDLib 文件并复制一份到缓存目录（按原始文件名），供预览/分享使用
+    private func downloadAndStage(client: TDLibClient, fileId: Int, name: String, size: Int64, mime: String) async -> DownloadedFile? {
+        if let cached = downloadedFiles[fileId] { return cached }
         do {
             let file = try await client.downloadFile(
-                fileId: fid, limit: 0, offset: 0, priority: 16, synchronous: true)
+                fileId: fileId, limit: 0, offset: 0, priority: 16, synchronous: true)
             guard file.local.isDownloadingCompleted, !file.local.path.isEmpty else { return nil }
             let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("shared", isDirectory: true)
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let rawName = d.document.fileName.isEmpty ? "file-\(fid)" : d.document.fileName
+            let rawName = name.isEmpty ? "file-\(fileId)" : name
             var dst = dir.appendingPathComponent(rawName)
             if FileManager.default.fileExists(atPath: dst.path) {
                 let ext = dst.pathExtension
                 let base = dst.deletingPathExtension().lastPathComponent
-                dst = dir.appendingPathComponent(ext.isEmpty ? "\(base)-\(fid)" : "\(base)-\(fid).\(ext)")
+                dst = dir.appendingPathComponent(ext.isEmpty ? "\(base)-\(fileId)" : "\(base)-\(fileId).\(ext)")
             }
             try? FileManager.default.copyItem(at: URL(fileURLWithPath: file.local.path), to: dst)
             guard FileManager.default.fileExists(atPath: dst.path) else { return nil }
-            let result = DownloadedFile(
-                url: dst,
-                name: rawName,
-                size: d.document.document.size > 0 ? d.document.document.size : d.document.document.expectedSize,
-                mime: d.document.mimeType)
-            downloadedFiles[fid] = result
+            let result = DownloadedFile(url: dst, name: rawName, size: size, mime: mime)
+            downloadedFiles[fileId] = result
             return result
         } catch {
             return nil
@@ -366,8 +383,9 @@ final class TDService: ObservableObject {
             return (t.text.text, false)
         case .messagePhoto:
             return ("[图片]", true)
-        case .messageVideo:
-            return ("[视频]", true)
+        case .messageVideo(let v):
+            let name = v.video.fileName.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (name.isEmpty ? "[视频]" : "[视频] \(name)", true)
         case .messageAnimation:
             return ("[动图]", true)
         case .messageAudio:

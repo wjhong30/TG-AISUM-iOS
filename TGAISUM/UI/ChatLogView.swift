@@ -1,4 +1,5 @@
 import SwiftUI
+import AVKit
 import QuickLook
 
 /// 引用跳转目标：群 + 天 + 时段 + 要高亮的消息
@@ -77,6 +78,8 @@ struct ChatLogView: View {
                 }
                 if m.isImage {
                     ImageBubble(chatId: target.chatId, messageId: m.id) { fullscreenImage = $0 }
+                } else if m.isVideo {
+                    VideoBubble(chatId: target.chatId, messageId: m.id, archivedName: m.archivedFileName)
                 } else if m.isFile {
                     FileBubble(chatId: target.chatId, messageId: m.id, archivedName: m.archivedFileName)
                 } else {
@@ -97,10 +100,12 @@ struct ChatLogView: View {
 
 extension ArchiveMessage {
     var isImage: Bool { text == "[图片]" }
+    var isVideo: Bool { text.hasPrefix("[视频]") }
     var isFile: Bool { text.hasPrefix("[文件]") }
-    /// 归档文本里的文件名（v0.5.4 起才带；旧数据为空，点按下载后仍能拿到真名）
+    /// 归档文本里带的原始文件名（v0.5.4 起才带；旧数据为空，点按下载后仍能拿到真名）
     var archivedFileName: String {
-        String(text.dropFirst("[文件]".count)).trimmingCharacters(in: .whitespaces)
+        let prefix = isVideo ? "[视频]" : "[文件]"
+        return String(text.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
     }
 }
 
@@ -187,7 +192,7 @@ private struct ImageViewer: View {
     }
 }
 
-/// 文件气泡：点按下载，下载后可预览、分享、保存到「文件」
+/// 文件气泡：点按下载后直接进 Quick Look 预览（预览自带分享，可保存到「文件」等）
 private struct FileBubble: View {
     let chatId: Int64
     let messageId: Int64
@@ -196,8 +201,6 @@ private struct FileBubble: View {
     @State private var file: TDService.DownloadedFile?
     @State private var loading = false
     @State private var failed = false
-    @State private var showActions = false
-    @State private var shareItem: URLPayload?
     @State private var previewItem: URLPayload?
 
     private var displayName: String {
@@ -207,7 +210,7 @@ private struct FileBubble: View {
     var body: some View {
         Button {
             if file != nil {
-                showActions = true
+                previewItem = URLPayload(url: file!.url)
             } else {
                 load()
             }
@@ -217,19 +220,19 @@ private struct FileBubble: View {
                     .font(.title3)
                     .foregroundStyle(Color.accentColor)
                 VStack(alignment: .leading, spacing: 2) {
+                    // 完整展示文件名，不截断
                     Text(displayName)
                         .font(.subheadline.weight(.medium))
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(subtitle)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
                 }
                 Spacer(minLength: 4)
                 if loading {
                     ProgressView()
                 } else {
-                    Image(systemName: file == nil ? "arrow.down.circle" : "ellipsis.circle")
+                    Image(systemName: file == nil ? "arrow.down.circle" : "play.circle")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -240,17 +243,9 @@ private struct FileBubble: View {
                         in: RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
-        .confirmationDialog(displayName, isPresented: $showActions, titleVisibility: .visible) {
-            Button("预览") { previewItem = file.map { URLPayload(url: $0.url) } }
-            Button("分享 / 保存到文件") { shareItem = file.map { URLPayload(url: $0.url) } }
-            Button("取消", role: .cancel) {}
-        }
         .sheet(item: $previewItem) { p in
             QuickLookView(url: p.url)
                 .ignoresSafeArea()
-        }
-        .sheet(item: $shareItem) { p in
-            ActivityShareView(items: [p.url])
         }
     }
 
@@ -274,10 +269,139 @@ private struct FileBubble: View {
             loading = false
             if let f {
                 file = f
-                showActions = true
+                previewItem = URLPayload(url: f.url)
             } else {
                 failed = true
             }
+        }
+    }
+}
+
+/// 视频气泡：点按下载后在 App 内直接播放，可分享/保存到相册或「文件」
+private struct VideoBubble: View {
+    let chatId: Int64
+    let messageId: Int64
+    let archivedName: String
+
+    @State private var file: TDService.DownloadedFile?
+    @State private var loading = false
+    @State private var failed = false
+    @State private var playerItem: URLPayload?
+
+    private var displayName: String {
+        file?.name ?? (archivedName.isEmpty ? "视频" : archivedName)
+    }
+
+    var body: some View {
+        Button {
+            if file != nil {
+                playerItem = URLPayload(url: file!.url)
+            } else {
+                load()
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "video.fill")
+                    .font(.title3)
+                    .foregroundStyle(Color.accentColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(displayName)
+                        .font(.subheadline.weight(.medium))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 4)
+                if loading {
+                    ProgressView()
+                } else {
+                    Image(systemName: file == nil ? "arrow.down.circle" : "play.circle.fill")
+                        .foregroundStyle(Color.accentColor)
+                }
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 9)
+            .frame(maxWidth: 250, alignment: .leading)
+            .background(Color(uiColor: .secondarySystemGroupedBackground),
+                        in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .fullScreenCover(item: $playerItem) { p in
+            VideoPlayerScreen(url: p.url)
+        }
+    }
+
+    private var subtitle: String {
+        if loading { return "下载中…" }
+        if let f = file {
+            let fmt = ByteCountFormatter()
+            fmt.countStyle = .file
+            return fmt.string(fromByteCount: f.size)
+        }
+        if failed { return "下载失败，点按重试" }
+        return "点按下载播放"
+    }
+
+    private func load() {
+        guard !loading else { return }
+        loading = true
+        failed = false
+        Task {
+            let f = await TDService.shared.downloadVideo(chatId: chatId, messageId: messageId)
+            loading = false
+            if let f {
+                file = f
+                playerItem = URLPayload(url: f.url)
+            } else {
+                failed = true
+            }
+        }
+    }
+}
+
+/// App 内视频播放器：自动播放，右上角分享（可存相册/文件），左上角关闭
+private struct VideoPlayerScreen: View {
+    let url: URL
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var shareItem: URLPayload?
+    @State private var player: AVPlayer
+
+    init(url: URL) {
+        self.url = url
+        _player = State(initialValue: AVPlayer(url: url))
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            Color.black.ignoresSafeArea()
+            VideoPlayer(player: player)
+                .ignoresSafeArea()
+            HStack {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.white.opacity(0.85))
+                }
+                Spacer()
+                Button {
+                    shareItem = URLPayload(url: url)
+                } label: {
+                    Image(systemName: "square.and.arrow.up.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.white.opacity(0.85))
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 6)
+        }
+        .onAppear { player.play() }
+        .onDisappear { player.pause() }
+        .sheet(item: $shareItem) { p in
+            ActivityShareView(items: [p.url])
         }
     }
 }
