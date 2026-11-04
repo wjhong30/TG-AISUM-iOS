@@ -35,12 +35,10 @@ struct RichTextView: View {
             ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, p in
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(p.lines.enumerated()), id: \.offset) { idx, line in
-                        Text(line)
-                            .font(idx == 0 ? .callout.weight(.semibold) : .callout)
-                            .foregroundStyle(idx == 0 ? Color.primary : Color.primary.opacity(0.85))
-                            .lineSpacing(3)
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
+                        MentionText(
+                            text: line,
+                            font: idx == 0 ? .callout.weight(.semibold) : .callout,
+                            color: idx == 0 ? Color.primary : Color.primary.opacity(0.85))
                     }
                 }
             }

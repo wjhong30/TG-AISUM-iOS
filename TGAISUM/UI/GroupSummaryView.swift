@@ -260,11 +260,7 @@ struct GroupSummaryView: View {
     private func overviewCard(_ topic: PromptBuilder.SummaryTopic) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(Array(topic.bullets.enumerated()), id: \.offset) { _, line in
-                Text(line)
-                    .font(.callout.weight(.medium))
-                    .lineSpacing(3)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
+                MentionText(text: line, font: .callout.weight(.medium))
             }
             if topic.bullets.isEmpty, !topic.title.isEmpty {
                 Text(topic.title).font(.callout.weight(.medium))
@@ -307,11 +303,7 @@ struct GroupSummaryView: View {
                     Circle().fill(Color.accentColor.opacity(0.6))
                         .frame(width: 5, height: 5)
                         .padding(.top, 7)
-                    Text(line)
-                        .font(.callout)
-                        .lineSpacing(3)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
+                    MentionText(text: line)
                 }
             }
 

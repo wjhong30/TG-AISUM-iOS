@@ -78,10 +78,9 @@ struct ChatLogView: View {
                 if m.isImage {
                     ImageBubble(chatId: target.chatId, messageId: m.id) { fullscreenImage = $0 }
                 } else if m.isFile {
-                    FileBubble(chatId: target.chatId, messageId: m.id)
+                    FileBubble(chatId: target.chatId, messageId: m.id, archivedName: m.archivedFileName)
                 } else {
-                    Text(m.text)
-                        .font(.subheadline)
+                    MentionText(text: m.text, font: .subheadline)
                         .padding(.horizontal, 11)
                         .padding(.vertical, 7)
                         .background(
@@ -98,7 +97,11 @@ struct ChatLogView: View {
 
 extension ArchiveMessage {
     var isImage: Bool { text == "[图片]" }
-    var isFile: Bool { text == "[文件]" }
+    var isFile: Bool { text.hasPrefix("[文件]") }
+    /// 归档文本里的文件名（v0.5.4 起才带；旧数据为空，点按下载后仍能拿到真名）
+    var archivedFileName: String {
+        String(text.dropFirst("[文件]".count)).trimmingCharacters(in: .whitespaces)
+    }
 }
 
 /// 图片气泡：懒加载下载，加载完成显示缩略图，点击全屏
@@ -188,6 +191,7 @@ private struct ImageViewer: View {
 private struct FileBubble: View {
     let chatId: Int64
     let messageId: Int64
+    let archivedName: String
 
     @State private var file: TDService.DownloadedFile?
     @State private var loading = false
@@ -195,6 +199,10 @@ private struct FileBubble: View {
     @State private var showActions = false
     @State private var shareItem: URLPayload?
     @State private var previewItem: URLPayload?
+
+    private var displayName: String {
+        file?.name ?? (archivedName.isEmpty ? "文件" : archivedName)
+    }
 
     var body: some View {
         Button {
@@ -209,7 +217,7 @@ private struct FileBubble: View {
                     .font(.title3)
                     .foregroundStyle(Color.accentColor)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(file?.name ?? "文件")
+                    Text(displayName)
                         .font(.subheadline.weight(.medium))
                         .lineLimit(1)
                     Text(subtitle)
@@ -232,7 +240,7 @@ private struct FileBubble: View {
                         in: RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
-        .confirmationDialog(file?.name ?? "文件", isPresented: $showActions, titleVisibility: .visible) {
+        .confirmationDialog(displayName, isPresented: $showActions, titleVisibility: .visible) {
             Button("预览") { previewItem = file.map { URLPayload(url: $0.url) } }
             Button("分享 / 保存到文件") { shareItem = file.map { URLPayload(url: $0.url) } }
             Button("取消", role: .cancel) {}

@@ -376,8 +376,9 @@ final class TDService: ObservableObject {
             return ("[语音]", true)
         case .messageVideoNote:
             return ("[视频笔记]", true)
-        case .messageDocument:
-            return ("[文件]", true)
+        case .messageDocument(let d):
+            let name = d.document.fileName.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (name.isEmpty ? "[文件]" : "[文件] \(name)", true)
         case .messageSticker:
             return ("[贴纸]", true)
         case .messagePaidMedia:
