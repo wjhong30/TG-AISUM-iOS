@@ -265,7 +265,7 @@ struct GroupSummaryView: View {
             if topic.bullets.isEmpty, !topic.title.isEmpty {
                 Text(topic.title).font(.callout.weight(.medium))
             }
-            viewLogLink(citations: topic.citations)
+            viewLogLink(for: topic)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
@@ -307,7 +307,7 @@ struct GroupSummaryView: View {
                 }
             }
 
-            viewLogLink(citations: topic.citations)
+            viewLogLink(for: topic)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
@@ -315,23 +315,29 @@ struct GroupSummaryView: View {
                     in: RoundedRectangle(cornerRadius: 14))
     }
 
-    /// 「查看记录」入口：跳该话题引用消息所在的原始记录（高亮第一条引用）
+    /// 「查看记录」：只展示该话题时间区间内的原始消息，并高亮第一条落在区间内的引用
     @ViewBuilder
-    private func viewLogLink(citations: [Int]) -> some View {
-        let firstValid = citations.first { PromptBuilder.message(at: $0, in: messages) != nil }
-        if firstValid != nil || !messages.isEmpty {
-            HStack {
-                Spacer()
-                NavigationLink(value: ChatLogTarget(
-                    chatId: chatId, title: chatTitle, dayKey: dayKey,
-                    startMinute: slot.startMinute, endMinute: slot.endMinute,
-                    highlight: firstValid.flatMap { PromptBuilder.message(at: $0, in: messages)?.id })) {
-                    Label("查看记录", systemImage: "bubble.left.and.bubble.right")
-                        .font(.caption)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+    private func viewLogLink(for topic: PromptBuilder.SummaryTopic) -> some View {
+        let target = topicLogTarget(topic) ?? ChatLogTarget(
+            chatId: chatId, title: chatTitle, dayKey: dayKey,
+            startMinute: slot.startMinute, endMinute: slot.endMinute, highlight: nil)
+        let windowMsgs = PromptBuilder.filter(
+            messages: messages, dayKey: dayKey,
+            slot: SlotRange.custom(startMinute: target.startMinute, endMinute: target.endMinute))
+        let highlight = topic.citations
+            .compactMap { PromptBuilder.message(at: $0, in: windowMsgs)?.id }
+            .first
+        HStack {
+            Spacer()
+            NavigationLink(value: ChatLogTarget(
+                chatId: target.chatId, title: target.title, dayKey: target.dayKey,
+                startMinute: target.startMinute, endMinute: target.endMinute,
+                highlight: highlight)) {
+                Label("查看记录", systemImage: "bubble.left.and.bubble.right")
+                    .font(.caption)
             }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         }
     }
 

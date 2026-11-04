@@ -48,7 +48,7 @@ struct ChatLogView: View {
                 }
             }
         }
-        .navigationTitle("\(target.dayKey) 群聊记录")
+        .navigationTitle("\(target.dayKey) \(SlotRange.custom(startMinute: target.startMinute, endMinute: target.endMinute).timeText)")
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(item: Binding(
             get: { fullscreenImage.map { ImagePayload(image: $0) } },

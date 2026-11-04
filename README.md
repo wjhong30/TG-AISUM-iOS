@@ -182,6 +182,7 @@ project.yml                xcodegen 配置（可选）
 
 | 版本 | tag | 要点 |
 |---|---|---|
+| 0.5.5 | [`v0.5.5`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.5.5) | 话题「查看记录」只展示该话题时间区间的消息并高亮引用 |
 | 0.5.4 | [`v0.5.4`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.5.4) | @昵称 高亮、文件消息不下载即显示文件名、话题数不设上限+深度硬约束 |
 | 0.5.3 | [`v0.5.3`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.5.3) | 文件查看/保存、切后台继续总结、桌面版 logo 图标、总结更深（话题数按消息量自适应）、总结分享、失败自动重试 |
 | 0.5.2 | [`v0.5.2`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.5.2) | 按需抓取历史日期、记录页看图片、后台刷新、圆片改「查看记录」、模板格式收紧 |
