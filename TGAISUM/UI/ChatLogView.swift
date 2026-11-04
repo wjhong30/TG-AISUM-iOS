@@ -1,5 +1,4 @@
 import SwiftUI
-import AVKit
 import QuickLook
 
 /// 引用跳转目标：群 + 天 + 时段 + 要高亮的消息
@@ -232,7 +231,7 @@ private struct FileBubble: View {
                 if loading {
                     ProgressView()
                 } else {
-                    Image(systemName: file == nil ? "arrow.down.circle" : "play.circle")
+                    Image(systemName: file == nil ? "arrow.down.circle" : "doc.text.viewfinder")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -277,7 +276,8 @@ private struct FileBubble: View {
     }
 }
 
-/// 视频气泡：点按下载后在 App 内直接播放，可分享/保存到相册或「文件」
+/// 视频气泡：点按下载后进 Quick Look 预览窗口（Telegram 式，自带播放/分享/关闭），
+/// 分享面板可保存到相册或「文件」
 private struct VideoBubble: View {
     let chatId: Int64
     let messageId: Int64
@@ -286,7 +286,7 @@ private struct VideoBubble: View {
     @State private var file: TDService.DownloadedFile?
     @State private var loading = false
     @State private var failed = false
-    @State private var playerItem: URLPayload?
+    @State private var previewItem: URLPayload?
 
     private var displayName: String {
         file?.name ?? (archivedName.isEmpty ? "视频" : archivedName)
@@ -295,7 +295,7 @@ private struct VideoBubble: View {
     var body: some View {
         Button {
             if file != nil {
-                playerItem = URLPayload(url: file!.url)
+                previewItem = URLPayload(url: file!.url)
             } else {
                 load()
             }
@@ -316,8 +316,8 @@ private struct VideoBubble: View {
                 if loading {
                     ProgressView()
                 } else {
-                    Image(systemName: file == nil ? "arrow.down.circle" : "play.circle.fill")
-                        .foregroundStyle(Color.accentColor)
+                    Image(systemName: file == nil ? "arrow.down.circle" : "eye.circle.fill")
+                        .foregroundStyle(.secondary)
                 }
             }
             .padding(.horizontal, 11)
@@ -327,8 +327,9 @@ private struct VideoBubble: View {
                         in: RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
-        .fullScreenCover(item: $playerItem) { p in
-            VideoPlayerScreen(url: p.url)
+        .sheet(item: $previewItem) { p in
+            QuickLookView(url: p.url)
+                .ignoresSafeArea()
         }
     }
 
@@ -340,7 +341,7 @@ private struct VideoBubble: View {
             return fmt.string(fromByteCount: f.size)
         }
         if failed { return "下载失败，点按重试" }
-        return "点按下载播放"
+        return "点按下载查看"
     }
 
     private func load() {
@@ -352,56 +353,10 @@ private struct VideoBubble: View {
             loading = false
             if let f {
                 file = f
-                playerItem = URLPayload(url: f.url)
+                previewItem = URLPayload(url: f.url)
             } else {
                 failed = true
             }
-        }
-    }
-}
-
-/// App 内视频播放器：自动播放，右上角分享（可存相册/文件），左上角关闭
-private struct VideoPlayerScreen: View {
-    let url: URL
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var shareItem: URLPayload?
-    @State private var player: AVPlayer
-
-    init(url: URL) {
-        self.url = url
-        _player = State(initialValue: AVPlayer(url: url))
-    }
-
-    var body: some View {
-        ZStack(alignment: .top) {
-            Color.black.ignoresSafeArea()
-            VideoPlayer(player: player)
-                .ignoresSafeArea()
-            HStack {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(.white.opacity(0.85))
-                }
-                Spacer()
-                Button {
-                    shareItem = URLPayload(url: url)
-                } label: {
-                    Image(systemName: "square.and.arrow.up.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(.white.opacity(0.85))
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.top, 6)
-        }
-        .onAppear { player.play() }
-        .onDisappear { player.pause() }
-        .sheet(item: $shareItem) { p in
-            ActivityShareView(items: [p.url])
         }
     }
 }
