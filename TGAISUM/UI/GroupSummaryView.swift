@@ -5,13 +5,15 @@ import UIKit
 struct GroupSummaryView: View {
     let chatId: Int64
     let chatTitle: String
+    /// 从消息页带着所选日期进来，直接落在那天
+    var initialDay: Date? = nil
 
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var summaryStore = SummaryStore.shared
     @ObservedObject private var archive = ArchiveStore.shared
     @ObservedObject private var sync = SyncService.shared
 
-    @State private var day = Date()
+    @State private var day: Date
     @State private var slotMode: SlotMode = .full
     @State private var customStart = Calendar.current.date(bySettingHour: 8, minute: 0, second: 0, of: Date()) ?? Date()
     @State private var customEnd = Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: Date()) ?? Date()
@@ -19,6 +21,13 @@ struct GroupSummaryView: View {
     /// 已尝试补抓过的日期（避免无消息的日期反复触发抓取）
     @State private var fetchedDays: Set<String> = []
     @State private var shareText: TextPayload?
+
+    init(chatId: Int64, chatTitle: String, initialDay: Date? = nil) {
+        self.chatId = chatId
+        self.chatTitle = chatTitle
+        self.initialDay = initialDay
+        self._day = State(initialValue: initialDay ?? Date())
+    }
 
     private var dayKey: String { DayUtil.dayKey(day) }
     private var slot: SlotRange { slotMode.range(customStart: customStart, customEnd: customEnd) }

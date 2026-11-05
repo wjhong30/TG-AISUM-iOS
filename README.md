@@ -182,6 +182,7 @@ project.yml                xcodegen 配置（可选）
 
 | 版本 | tag | 要点 |
 |---|---|---|
+| 0.5.9 | [`v0.5.9`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.5.9) | 消息页日期切换（最近7天）+ 每个群「已总结/未总结」状态一眼可见；选日期刷新自动补齐缺的总结 |
 | 0.5.8 | [`v0.5.8`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.5.8) | 链接识别重做（系统 NSDataDetector，下划线点按跳 Safari）；视频全屏播放器与文件一键分享（0.5.7）延续 |
 | 0.5.7 | [`v0.5.7`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.5.7) | 视频全屏播放器（进度条/±10秒/画中画）；文件下载后直接弹分享面板 |
 | 0.5.6 | [`v0.5.6`](https://github.com/wjhong30/TG-AISUM-iOS/releases/tag/v0.5.6) | 存储空间管理：分类统计占用 + 全选/部分清理（图片媒体、文件副本、总结缓存、聊天归档） |
